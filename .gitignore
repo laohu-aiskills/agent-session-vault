@@ -1,0 +1,11 @@
+node_modules/
+.scratch/
+.spec-workflow/
+*.log
+index.db
+index.db-wal
+index.db-shm
+.DS_Store
+.build-sea/
+dist/
+release/

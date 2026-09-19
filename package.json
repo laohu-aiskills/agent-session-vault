@@ -1,0 +1,66 @@
+{
+  "name": "agent-session-vault",
+  "version": "0.1.0",
+  "private": true,
+  "description": "统一读取、检索、备份、还原多种 AI Agent 的本地会话记录",
+  "license": "MIT",
+  "author": "ASV",
+  "main": "desktop/main.js",
+  "bin": {
+    "asv": "bin/asv"
+  },
+  "scripts": {
+    "asv": "node bin/asv",
+    "start": "electron .",
+    "desktop": "electron .",
+    "smoke": "electron . --smoke",
+    "selftest": "electron . --selftest",
+    "probe": "electron . --probe test/ui-probe.js",
+    "verify": "node test/verify.js",
+    "build:sea": "node tools/build-sea.js",
+    "build:desktop": "electron-builder --win",
+    "build": "node tools/build-sea.js && electron-builder --win"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "devDependencies": {
+    "electron": "^40.9.3",
+    "electron-builder": "^26.15.3",
+    "postject": "^1.0.0-alpha.6"
+  },
+  "build": {
+    "appId": "cn.asv.agentsessionvault",
+    "productName": "AgentSessionVault",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        },
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    }
+  }
+}

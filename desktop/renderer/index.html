@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>Agent Session Vault</title>
+<style>
+:root{
+  --bg:#f6f6f4; --panel:#fff; --line:#e4e4df; --line-soft:#eeeeea;
+  --txt:#1f1f1d; --txt2:#6b6b66; --txt3:#96968f;
+  --blue:#185fa5; --blue-bg:#e6f1fb; --blue-line:#b5d4f4;
+  --teal:#0f6e56; --teal-bg:#e1f5ee;
+  --amber:#854f0b; --amber-bg:#faeeda;
+  --red:#a32d2d; --red-bg:#fcebeb;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--txt);
+  font:13.5px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+button{font:inherit;cursor:pointer;border-radius:7px;border:1px solid var(--line);
+  background:#fff;color:var(--txt);padding:5px 11px;transition:background .12s}
+button:hover{background:#fafaf8}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button.primary:hover{background:#134f8b}
+button.ghost{background:transparent}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select{font:inherit;color:var(--txt);background:#fff;border:1px solid var(--line);
+  border-radius:7px;padding:5px 10px;outline:none}
+input:focus,select:focus{border-color:var(--blue-line);box-shadow:0 0 0 3px rgba(24,95,165,.08)}
+
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--panel);
+  border-bottom:1px solid var(--line);flex:0 0 auto}
+.brand{font-weight:500;font-size:14px;white-space:nowrap}
+.brand small{color:var(--txt3);font-weight:400;margin-left:6px}
+#q{flex:1;min-width:140px}
+#btnQclear{display:none}
+.spacer{flex:0 0 auto}
+.hint{font-size:12px;color:var(--txt3);white-space:nowrap}
+
+main{flex:1;display:flex;min-height:0}
+#left{width:372px;flex:0 0 372px;border-right:1px solid var(--line);background:var(--panel);
+  display:flex;flex-direction:column;min-height:0}
+#listHead{padding:8px 12px;border-bottom:1px solid var(--line-soft);font-size:12px;color:var(--txt2);
+  display:flex;justify-content:space-between;align-items:center;gap:8px}
+#listHead .tools{display:flex;align-items:center;gap:2px;flex:0 0 auto}
+#listCount{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#listCount.busy{color:var(--txt3)}
+.minisel{border:1px solid transparent;background:transparent;color:var(--txt2);font-size:12px;
+  padding:3px 4px;border-radius:6px;cursor:pointer;outline:none}
+.minisel:hover{background:#f0f0ec;color:var(--txt)}
+.iconbtn{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--txt2);border-radius:7px}
+.iconbtn:hover{background:#f0f0ec;color:var(--txt)}
+.spin3{display:inline-flex;gap:2.5px;flex:0 0 auto}
+.spin3 i{width:4px;height:4px;border-radius:50%;background:var(--txt3);animation:pulse3 1s infinite}
+.spin3 i:nth-child(2){animation-delay:.15s}
+.spin3 i:nth-child(3){animation-delay:.3s}
+@keyframes pulse3{0%,100%{opacity:.2}50%{opacity:1}}
+#list{flex:1;overflow-y:auto}
+.item{padding:9px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer}
+.item:hover{background:#fafaf8}
+.item.active{background:var(--blue-bg);border-left:3px solid var(--blue);padding-left:9px}
+.item .t{font-weight:500;margin-bottom:2px;word-break:break-word}
+.item .m{font-size:11.5px;color:var(--txt3);display:flex;gap:6px;flex-wrap:wrap}
+.pill{display:inline-block;padding:0 6px;border-radius:4px;font-size:11px;line-height:17px;
+  background:#f0f0ec;color:var(--txt2)}
+.pill.blue{background:var(--blue-bg);color:var(--blue)}
+.pill.teal{background:var(--teal-bg);color:var(--teal)}
+.pill .agi{vertical-align:-2px;margin-right:3px}
+#detailTitle .agi{vertical-align:-2px;margin-right:5px}
+
+#right{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+#detailBar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--panel);
+  border-bottom:1px solid var(--line);flex:0 0 auto;flex-wrap:wrap}
+#detailTitle{font-weight:500;flex:1;min-width:120px;word-break:break-word}
+#detail{flex:1;overflow-y:auto;padding:14px}
+.meta{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.meta table{border-collapse:collapse;width:100%}
+.meta td{padding:2px 0;font-size:12.5px;vertical-align:top}
+.meta td:first-child{width:88px;color:var(--txt2)}
+.meta code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:#f0f0ec;
+  padding:1px 5px;border-radius:4px;word-break:break-all}
+
+.msg{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:10px 13px;margin-bottom:9px}
+.msg.user{border-left:3px solid var(--blue)}
+.msg.assistant{border-left:3px solid var(--teal)}
+.msg.tool{border-left:3px solid #b4b2a9}
+.msg.system{border-left:3px solid #d3d1c7}
+.mh{display:flex;gap:7px;align-items:center;font-size:11.5px;color:var(--txt3);margin-bottom:5px}
+.mh .seq{background:#f0f0ec;border-radius:5px;min-width:20px;text-align:center;
+  display:inline-block;padding:0 4px;color:var(--txt2);font-weight:500}
+.mh .role{font-weight:500;color:var(--txt2)}
+.mh .ts{margin-left:auto}
+.body{white-space:pre-wrap;word-break:break-word;font-size:13px}
+pre{margin:4px 0 0;padding:8px 10px;background:#fafaf8;border:1px solid var(--line-soft);
+  border-radius:7px;overflow-x:auto;font:12px/1.55 ui-monospace,Consolas,monospace;
+  white-space:pre-wrap;word-break:break-word;max-height:360px;overflow-y:auto}
+details summary{cursor:pointer;font-size:12px;color:var(--txt2)}
+.toolname{display:inline-block;font:12px ui-monospace,Consolas,monospace;background:var(--blue-bg);
+  color:var(--blue);padding:1px 7px;border-radius:5px;margin-bottom:4px}
+
+#status{flex:0 0 auto;padding:6px 14px;background:var(--panel);border-top:1px solid var(--line);
+  font-size:12px;color:var(--txt2);display:flex;gap:14px;align-items:center}
+#status .grow{flex:1}
+.empty{padding:36px 20px;text-align:center;color:var(--txt3);font-size:13px}
+.bar{height:3px;background:var(--line-soft);border-radius:2px;overflow:hidden;margin-top:6px;display:none}
+.bar.on{display:block}
+.bar i{display:block;height:100%;width:30%;background:var(--blue);
+  animation:slide 1.1s ease-in-out infinite}
+@keyframes slide{0%{margin-left:-30%}100%{margin-left:100%}}
+#refreshBar{display:none}
+button.refreshing{opacity:.55;pointer-events:none;color:var(--blue)}
+button.refreshing svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+dialog{border:1px solid var(--line);border-radius:12px;padding:0;background:var(--panel);
+  color:var(--txt);width:640px;max-width:92vw;box-shadow:0 12px 40px rgba(0,0,0,.14)}
+dialog::backdrop{background:rgba(30,30,28,.32)}
+.dlg{padding:16px 18px}
+.dlg h3{margin:0 0 10px;font-size:15px;font-weight:500}
+.dlg .row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.dlg .list{max-height:260px;overflow:auto;border:1px solid var(--line-soft);border-radius:8px;
+  padding:8px 10px;font:12px ui-monospace,Consolas,monospace;background:#fafaf8}
+.dlg .list div{padding:1px 0;word-break:break-all}
+.foot{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.warn{background:var(--red-bg);color:var(--red);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:8px}
+.note{background:var(--amber-bg);color:var(--amber);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:8px}
+.ok{background:var(--teal-bg);color:var(--teal);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:8px}
+
+/* 有更新的会话 */
+.item.fresh{background:#fdf6e8}
+.item.fresh .t::before{content:'●';color:#d97706;margin-right:6px;font-size:11px}
+.pill.new{background:var(--amber-bg);color:var(--amber);font-weight:500}
+
+/* 会话内查找 */
+mark.find{background:#fde68a;color:inherit;padding:0 1px;border-radius:2px}
+mark.find.cur{background:#e07a1f;color:#fff}
+#findBar{display:none;align-items:center;gap:8px;padding:6px 14px;background:var(--panel);
+  border-bottom:1px solid var(--line);flex:0 0 auto}
+#findBox{width:300px}
+#findCount{font-size:12px;color:var(--txt2);min-width:70px;white-space:nowrap}
+#updChip{display:none;background:var(--amber-bg);color:var(--amber);border:1px solid #ecd9b0}
+#updChip:hover{background:#f6e3bd}
+#stRefresh{font-size:12px;color:var(--txt3);white-space:nowrap}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Agent Session Vault <small id="ver"></small></div>
+  <input id="q" placeholder="全文检索（输入后按回车或点 🔍；中文可直接搜，2 字以内会走扫描）" autocomplete="off">
+  <button id="btnQclear" class="iconbtn" title="清空并返回会话列表">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <button id="btnSearch" class="iconbtn" title="检索（回车）">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></svg>
+  </button>
+  <select id="agentFilter"><option value="">全部 Agent</option></select>
+  <button id="btnIndex" class="primary">建索引</button>
+  <button id="btnBackup">备份</button>
+  <button id="btnRestore">还原</button>
+  <span class="hint" id="modeHint"></span>
+</header>
+
+<main>
+  <div id="left">
+    <div id="listHead">
+      <span id="listCount">加载中…</span>
+      <span class="tools">
+        <select id="orderSel" class="minisel" title="排序方式">
+          <option value="updated">更新时间</option>
+          <option value="created">创建时间</option>
+        </select>
+        <select id="autoEvery" class="minisel" title="自动刷新间隔">
+          <option value="0">手动</option>
+          <option value="10">10秒</option>
+          <option value="30">30秒</option>
+          <option value="60">60秒</option>
+        </select>
+        <button id="btnRefresh" class="iconbtn" title="刷新列表与当前会话（增量，保留滚动位置与选区）">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>
+          </svg>
+        </button>
+      </span>
+    </div>
+    <div id="list"></div>
+  </div>
+  <div id="right">
+    <div id="detailBar">
+      <span id="detailTitle">未选择会话</span>
+      <button id="updChip" type="button" title="刷新时检测到本会话有新内容，但你正在选择文字，已暂缓载入">● 有新内容，点击载入</button>
+      <button id="btnMd" disabled>导出 MD</button>
+      <button id="btnHtml" disabled>导出 HTML</button>
+      <button id="btnMigrate" disabled>迁移</button>
+    </div>
+    <div id="findBar">
+      <input id="findBox" placeholder="在会话内容中查找（Enter 下一个 · Shift+Enter 上一个）" autocomplete="off">
+      <span id="findCount"></span>
+      <button id="btnFindPrev">上一个</button>
+      <button id="btnFindNext">下一个</button>
+      <button id="btnFindClose" class="ghost" title="关闭查找（Esc）">✕</button>
+    </div>
+    <div id="detail"><div class="empty">从左侧选择一个会话查看消息流</div></div>
+  </div>
+</main>
+
+<div id="status">
+  <span id="stAgents">-</span>
+  <span id="stRefresh"></span>
+  <span class="grow"></span>
+  <span id="stIndex">-</span>
+</div>
+
+<dialog id="dlg"><div class="dlg" id="dlgBody"></div></dialog>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const api = window.asv;
+let current = null;
+
+/* ---------------- 刷新 / 查找 状态 ---------------- */
+let lastRows = new Map();   // uid → 上次见过的 updated_at（跨过滤条件保留，避免切换筛选误报）
+let seen = new Map();       // uid → 用户最近一次打开时的 updated_at（已读水位）
+let refreshing = false;
+let autoTimer = null;
+let pendingDetailRefresh = false;   // 因文字选区暂缓的详情刷新
+let indexPromise = null;            // 并发共享的建索引调用
+const findState = { query:'', hits:[], idx:-1 };
+let findTimer = null;
+
+function loadSeen(){
+  try{ seen = new Map(Object.entries(JSON.parse(localStorage.getItem('asv.seen')||'{}'))); }
+  catch{ seen = new Map(); }
+}
+function saveSeen(){
+  try{ localStorage.setItem('asv.seen', JSON.stringify(Object.fromEntries(seen))); }catch{}
+}
+/** 多处共用同一次建索引调用，避免刷新与手动建索引并发写库 */
+function startIndexShared(opts){
+  if(!indexPromise) indexPromise = api.index(opts).finally(()=>{ indexPromise = null; });
+  return indexPromise;
+}
+/** 用户是否正在 #detail 里选择文字（此时不能重建详情 DOM） */
+function detailHasSelection(){
+  const sel = window.getSelection();
+  if(!sel || sel.isCollapsed || !sel.rangeCount) return false;
+  let node = sel.anchorNode;
+  if(node && node.nodeType === 3) node = node.parentNode;
+  return Boolean(node && $('#detail').contains(node));
+}
+
+function esc(s){
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function ts(v){
+  if(!v) return '-';
+  const d = new Date(v); const p = (x)=>String(x).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function size(n){
+  if(!n) return '0B';
+  const u=['B','KB','MB','GB']; let i=0,v=n;
+  while(v>=1024&&i<u.length-1){v/=1024;i++;}
+  return (v<10&&i>0?v.toFixed(1):Math.round(v))+u[i];
+}
+const KIND={text:'',reasoning:'推理',tool_call:'工具调用',tool_result:'工具结果',meta:'元信息'};
+const ROLE={user:'用户',assistant:'助手',system:'系统',tool:'工具'};
+
+/* ---------------- Agent 图标 ----------------
+ * 内联 SVG（离线可用，不依赖 img-src）。
+ * 画的是各家可识别的抽象轮廓 + 品牌色，不是官方 logo 的复刻。
+ * 未知 agent 回退为对话气泡。文字名始终保留。 */
+const AGENT_SVG = {
+  'claude-code': `<g stroke="#D97757" stroke-width="2.6" stroke-linecap="round">
+    <line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/>
+    <line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/><line x1="18.4" y1="5.6" x2="5.6" y2="18.4"/></g>`,
+  'codex': `<path d="M12 3a9 9 0 1 1-9 9" fill="none" stroke="#10a37f" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="12" cy="12" r="2.4" fill="#10a37f"/>`,
+  'workbuddy': `<rect x="4" y="8" width="16" height="11" rx="2.5" fill="none" stroke="#185fa5" stroke-width="2.4"/>
+    <path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8" fill="none" stroke="#185fa5" stroke-width="2.4"/>`,
+  'qwenworkcn': `<circle cx="12" cy="11" r="7" fill="none" stroke="#615ced" stroke-width="2.6"/>
+    <line x1="14.5" y1="16" x2="19" y2="20.5" stroke="#615ced" stroke-width="2.6" stroke-linecap="round"/>`,
+  'codebuddy': `<path d="M9 6 3.5 12 9 18M15 6l5.5 6L15 18" fill="none" stroke="#07c160" stroke-width="2.6"
+    stroke-linecap="round" stroke-linejoin="round"/>`,
+  'kimi-cli': `<path d="M20 13.2A8.3 8.3 0 1 1 10.8 4a6.8 6.8 0 0 0 9.2 9.2z" fill="#2b3a67"/>`,
+  'kimi-code': `<path d="M20 13.2A8.3 8.3 0 1 1 10.8 4a6.8 6.8 0 0 0 9.2 9.2z" fill="#2b3a67"/>`,
+  'zcode': `<path d="M5 6h14L5 18h14" fill="none" stroke="#e07a1f" stroke-width="2.8"
+    stroke-linecap="round" stroke-linejoin="round"/>`,
+  'opencode': `<rect x="3" y="4" width="18" height="16" rx="3" fill="none" stroke="#5f5e5a" stroke-width="2.2"/>
+    <path d="M7 9.5l3.5 2.5L7 14.5M13 15h4" fill="none" stroke="#5f5e5a" stroke-width="2.2"
+    stroke-linecap="round" stroke-linejoin="round"/>`,
+  'cursor': `<path d="M6 3l13 7.5-5.5 1.4L16 18l-3 1.6-2.5-6L6 17z" fill="#44443f"/>`,
+  'cline': `<rect x="5" y="6" width="14" height="12" rx="3.5" fill="none" stroke="#0f6e56" stroke-width="2.4"/>
+    <circle cx="10" cy="12" r="1.4" fill="#0f6e56"/><circle cx="14" cy="12" r="1.4" fill="#0f6e56"/>`,
+  'antigravity': `<circle cx="12" cy="12" r="5.5" fill="none" stroke="#8a63d2" stroke-width="2.2"/>
+    <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="#8a63d2" stroke-width="1.6" transform="rotate(-18 12 12)"/>`,
+};
+const AGENT_SVG_DEFAULT = `<path d="M4 5h16v11H9l-5 4z" fill="none" stroke="#888780" stroke-width="2.4" stroke-linejoin="round"/>`;
+let agentLabels = {};   // id → 展示名，refreshAgents 时填充
+function agentIcon(id, size = 12){
+  const body = AGENT_SVG[id] || AGENT_SVG_DEFAULT;
+  return `<svg class="agi" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
+}
+function agentBadge(id){
+  return `<span class="pill blue">${agentIcon(id)}${esc(agentLabels[id] || id)}</span>`;
+}
+
+/* ---------------- 初始化 ---------------- */
+async function boot(){
+  $('#ver').textContent = 'v0.1.0';
+  loadSeen();
+  $('#autoEvery').value = localStorage.getItem('asv.autoEvery') || '0';
+  if(Number($('#autoEvery').value) > 0) setAuto(true);
+  await refreshAgents();
+  await refreshStats();
+  await loadList();
+}
+
+async function refreshAgents(){
+  const agents = await api.agents();
+  const sel = $('#agentFilter');
+  sel.innerHTML = '<option value="">全部 Agent</option>';
+  agentLabels = {};
+  let readable = 0, totalSessions = 0;
+  for(const a of agents){
+    agentLabels[a.id] = a.label;
+    if(a.available && !a.restricted){
+      readable++;
+      totalSessions += a.count||0;
+      const o = document.createElement('option');
+      o.value = a.id;
+      o.textContent = `${a.label}（${a.count}）`;
+      sel.appendChild(o);
+    } else if(a.restricted){
+      const o = document.createElement('option');
+      o.value = '__r_'+a.id; o.disabled = true;
+      o.textContent = `${a.label}（受限，无正文）`;
+      sel.appendChild(o);
+    }
+  }
+  $('#stAgents').textContent = `可读来源 ${readable} 家 · ${totalSessions} 个会话`;
+  readableTotal = readable;
+}
+
+async function refreshStats(){
+  const st = await api.stats();
+  $('#stIndex').textContent = st.sessions
+    ? `索引 ${st.sessions} 会话 / ${st.messages} 条 · ${size(st.dbSize)}`
+    : '索引为空，请点「建索引」';
+}
+
+/* ---------------- 列表 ---------------- */
+async function loadList(){
+  const agent = $('#agentFilter').value || null;
+  const order = $('#orderSel').value;
+  const { rows, total } = await api.list({ agent, order, limit: 200 });
+  setListCount(`显示 ${rows.length} / 共 ${total}`);
+
+  // 与上次快照对比：更新时间变化或新出现的会话标记为「有更新」。
+  // 快照跨过滤条件累积（不整体替换），避免切换筛选时把没变化的会话误报成新更新
+  const fresh = new Set();
+  for(const r of rows){
+    const prev = lastRows.get(r.uid);
+    let isFresh = false;
+    if(prev === undefined){
+      if(lastRows.size > 0 && !seen.has(r.uid)) isFresh = true;                      // 全新会话
+      else if(seen.has(r.uid) && seen.get(r.uid) !== r.updated_at) isFresh = true;   // 读过但又更新
+    } else if(prev !== r.updated_at){
+      isFresh = true;
+    }
+    if(isFresh && r.uid !== (current && current.uid)) fresh.add(r.uid); // 当前正看的会话不标（内容已同步载入）
+  }
+  for(const r of rows) lastRows.set(r.uid, r.updated_at);
+  renderList(rows, fresh);
+  return fresh.size;
+}
+
+function renderList(rows, fresh){
+  const box = $('#list');
+  const keepScroll = box.scrollTop;
+  box.innerHTML = '';
+  if(!rows.length){
+    box.innerHTML = '<div class="empty">没有会话。<br>请先点右上角「建索引」。</div>';
+    return;
+  }
+  for(const r of rows){
+    const d = document.createElement('div');
+    d.className = 'item' + (fresh.has(r.uid) ? ' fresh' : '');
+    d.dataset.uid = r.uid;
+    if(current && r.uid === current.uid) d.classList.add('active');
+    d.innerHTML = `
+      <div class="t">${fresh.has(r.uid)?'<span class="pill new">新更新</span> ':''}${esc(r.title || '(无标题)')}</div>
+      <div class="m">
+        ${agentBadge(r.agent)}
+        <span>${r.msg_count} 条</span>
+        <span>${ts(r.updated_at)}</span>
+      </div>
+      <div class="m" style="margin-top:2px"><span style="font-size:11px">${esc(r.project_path||'未知项目')}</span></div>`;
+    d.onclick = () => openSession(r.uid, d);
+    box.appendChild(d);
+  }
+  box.scrollTop = keepScroll;
+}
+
+/* ---------------- 检索 ---------------- */
+async function doSearch(){
+  const q = $('#q').value.trim();
+  if(!q){ await loadList(); $('#modeHint').textContent=''; return; }
+  setListCount('检索中…', true);
+  const agent = $('#agentFilter').value || null;
+  const { mode, hits } = await api.search({ query: q, agent, limit: 200 });
+  $('#modeHint').textContent = mode==='fts' ? '索引检索' : '全表扫描（短查询）';
+  setListCount(`命中 ${hits.length} 条`);
+  const box = $('#list');
+  box.innerHTML = '';
+  if(!hits.length){ box.innerHTML = '<div class="empty">没有匹配的消息</div>'; return; }
+  for(const h of hits){
+    const d = document.createElement('div');
+    d.className = 'item';
+    d.dataset.uid = h.uid;
+    if(current && h.uid === current.uid) d.classList.add('active');
+    d.innerHTML = `
+      <div class="t">${esc(h.title || '(无标题)')}</div>
+      <div class="m">${agentBadge(h.agent)}
+        <span>${esc(ROLE[h.role]||h.role)}${KIND[h.kind]?' · '+KIND[h.kind]:''}</span>
+        <span>${ts(h.ts)}</span></div>
+      <div class="m" style="margin-top:3px"><span style="color:#5f5e5a">${esc(snippet(h.text,q))}</span></div>`;
+    d.onclick = () => openSession(h.uid, d);
+    box.appendChild(d);
+  }
+}
+function snippet(text,q,r=58){
+  const t=String(text||'').replace(/\\s+/g,' ').trim();
+  let at=t.toLowerCase().indexOf(q.toLowerCase());
+  if(at<0) at=0;
+  const s=Math.max(0,at-r), e=Math.min(t.length,at+q.length+r);
+  return (s>0?'…':'')+t.slice(s,e)+(e<t.length?'…':'');
+}
+
+/* ---------------- 会话详情 ---------------- */
+async function openSession(uid, el){
+  document.querySelectorAll('.item.active').forEach(x=>x.classList.remove('active'));
+  if(el) el.classList.add('active');
+  let data = await api.show(uid);
+  if(!data){ data = await api.showLive(uid); }
+  if(!data){ $('#detail').innerHTML='<div class="empty">读取失败</div>'; return; }
+  const s = data.session;
+  current = { uid, session: s, messages: data.messages, sessionUpdatedAt: s.updated_at ?? s.updatedAt };
+  seen.set(uid, current.sessionUpdatedAt); saveSeen();
+  pendingDetailRefresh = false; $('#updChip').style.display='none';
+  ['btnMd','btnHtml','btnMigrate'].forEach(id=>$('#'+id).disabled=false);
+  renderDetail(data);
+  $('#detail').scrollTop = 0;
+
+  $('#findBar').style.display = 'flex';
+  $('#findBox').value = ''; applyFind('');
+
+  // 打开后清除该行的「新更新」标记（只改这一行，不重建列表）
+  const rowEl = document.querySelector(`#list .item[data-uid="${CSS.escape(uid)}"]`);
+  if(rowEl){
+    rowEl.classList.remove('fresh');
+    const pill = rowEl.querySelector('.pill.new'); if(pill) pill.remove();
+  }
+}
+
+/**
+ * 渲染详情。keepScroll=true 时保留滚动位置（刷新场景）；
+ * 若查找框有关键词，渲染后自动重挂高亮并尽量停在原命中位置
+ */
+function renderDetail(data, keepScroll = false){
+  const box = $('#detail');
+  const keep = box.scrollTop;
+  const s = data.session;
+  $('#detailTitle').innerHTML = `${agentIcon(s.agent, 14)}${esc(s.title || '(无标题)')}`;
+  const meta = `
+    <div class="meta"><table>
+      <tr><td>Agent</td><td>${agentIcon(s.agent, 13)} <code title="标识：${esc(s.agent)}">${esc(agentLabels[s.agent] || s.agent)}</code>${data.source==='live'?' <span class="pill">现场解析</span>':''}</td></tr>
+      <tr><td>会话 ID</td><td><code>${esc(s.session_id||s.sessionId)}</code></td></tr>
+      <tr><td>项目路径</td><td><code>${esc(s.project_path||s.projectPath||'未知')}</code></td></tr>
+      <tr><td>创建 / 更新</td><td>${ts(s.created_at||s.createdAt)} / ${ts(s.updated_at||s.updatedAt)}</td></tr>
+      <tr><td>消息条数</td><td>${data.messages.length}</td></tr>
+    </table></div>`;
+
+  const parts = [meta];
+  for(const m of data.messages){
+    const kind = KIND[m.kind]||m.kind;
+    let body;
+    if(m.kind==='tool_call'){
+      body = `<div class="toolname">${esc(m.tool_name||m.toolName||'工具')}</div><pre>${esc(pretty(m.text))}</pre>`;
+    } else if(m.kind==='tool_result'){
+      body = `<pre>${esc(String(m.text||'').slice(0,20000))}</pre>`;
+    } else if(m.kind==='reasoning'){
+      body = `<details><summary>展开推理过程</summary><pre>${esc(m.text||'')}</pre></details>`;
+    } else {
+      body = `<div class="body">${esc(m.text||'')}</div>`;
+    }
+    parts.push(`<div class="msg ${m.role}">
+      <div class="mh"><span class="seq">${m.seq}</span><span class="role">${esc(ROLE[m.role]||m.role)}</span>
+      ${kind?`<span class="pill">${kind}</span>`:''}<span class="ts">${ts(m.ts)}</span></div>${body}</div>`);
+  }
+  box.innerHTML = parts.join('');
+  if(keepScroll) box.scrollTop = keep;
+  const q = $('#findBox').value.trim();
+  if(q) applyFind(q, { keepIdx:true });
+}
+function pretty(s){
+  const t=String(s??'').trim();
+  if(!t||!/^[[{]/.test(t)) return t;
+  try{ return JSON.stringify(JSON.parse(t),null,2); }catch{ return t; }
+}
+
+/* ---------------- 会话内查找 ---------------- */
+const FIND_MARK_LIMIT = 1000;   // 高亮上限：再高会把 DOM 打爆，常见字（如“的”）单字就能命中上万
+function clearFind(){
+  const marks = [...$('#detail').querySelectorAll('mark.find')];
+  for(const m of marks.reverse()){
+    const parent = m.parentNode;
+    if(!parent) continue;
+    parent.replaceChild(document.createTextNode(m.textContent), m);
+    parent.normalize();
+  }
+  findState.hits = []; findState.idx = -1;
+}
+/** 在 #detail 的所有文本节点里高亮 query 的全部命中（超过上限时只计数不高亮） */
+function applyFind(query, opts = {}){
+  const keepIdx = Boolean(opts.keepIdx);
+  const prevIdx = findState.idx;
+  clearFind();
+  findState.query = query;
+  if(!query || !current){ updateFindCount(); return; }
+
+  const lower = query.toLowerCase();
+  const walker = document.createTreeWalker($('#detail'), NodeFilter.SHOW_TEXT, {
+    acceptNode(n){
+      if(!n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      const p = n.parentNode;
+      if(p && (p.nodeName==='SCRIPT' || p.nodeName==='STYLE')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  const nodes = [];
+  for(let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+
+  // 先干数一遍总命中：超限就直接告诉用户换更长关键词，不做 DOM 高亮
+  let total = 0;
+  for(const node of nodes){
+    const tl = node.nodeValue.toLowerCase();
+    for(let at = tl.indexOf(lower); at >= 0; at = tl.indexOf(lower, at + lower.length)){
+      total += 1;
+      if(total > FIND_MARK_LIMIT) break;
+    }
+    if(total > FIND_MARK_LIMIT) break;
+  }
+  if(total > FIND_MARK_LIMIT){
+    findState.hits = []; findState.idx = -1;
+    $('#findCount').textContent = `命中 ${total}+ 处，过多未高亮，请加长关键词`;
+    return;
+  }
+
+  for(const node of nodes){
+    const text = node.nodeValue;
+    const tl = text.toLowerCase();
+    let at = tl.indexOf(lower);
+    if(at < 0) continue;
+    const frag = document.createDocumentFragment();
+    let pos = 0;
+    while(at >= 0){
+      if(at > pos) frag.appendChild(document.createTextNode(text.slice(pos, at)));
+      const mark = document.createElement('mark');
+      mark.className = 'find';
+      mark.textContent = text.slice(at, at + query.length);
+      frag.appendChild(mark);
+      pos = at + query.length;
+      at = tl.indexOf(lower, pos);
+    }
+    if(pos < text.length) frag.appendChild(document.createTextNode(text.slice(pos)));
+    node.parentNode.replaceChild(frag, node);
+  }
+
+  findState.hits = [...$('#detail').querySelectorAll('mark.find')];
+  if(findState.hits.length){
+    findState.idx = keepIdx ? Math.max(0, Math.min(prevIdx, findState.hits.length - 1)) : 0;
+    highlightCurrent();
+  }
+  updateFindCount();
+}
+function highlightCurrent(){
+  findState.hits.forEach(m=>m.classList.remove('cur'));
+  const m = findState.hits[findState.idx];
+  if(!m) return;
+  m.classList.add('cur');
+  // 命中在折叠的推理块里时先展开，否则滚不过去
+  let p = m.parentNode;
+  while(p && p !== document.body){
+    if(p.nodeName === 'DETAILS') p.open = true;
+    p = p.parentNode;
+  }
+  m.scrollIntoView({ block:'center' });
+}
+function updateFindCount(){
+  const el = $('#findCount');
+  if(!findState.query){ el.textContent=''; return; }
+  el.textContent = findState.hits.length ? `${findState.idx+1} / ${findState.hits.length}` : '无匹配';
+}
+function findNext(){
+  if(!findState.hits.length) return;
+  if(findState.idx >= findState.hits.length - 1){
+    if(confirm(`已到最后一个匹配（共 ${findState.hits.length} 个）。从头重新搜索？`)){
+      findState.idx = 0; highlightCurrent(); updateFindCount();
+    }
+    return;
+  }
+  findState.idx += 1; highlightCurrent(); updateFindCount();
+}
+function findPrev(){
+  if(!findState.hits.length) return;
+  if(findState.idx <= 0){
+    if(confirm(`已到第一个匹配（共 ${findState.hits.length} 个）。从末尾重新搜索？`)){
+      findState.idx = findState.hits.length - 1; highlightCurrent(); updateFindCount();
+    }
+    return;
+  }
+  findState.idx -= 1; highlightCurrent(); updateFindCount();
+}
+function closeFind(){
+  $('#findBar').style.display = 'none';
+  $('#findBox').value = '';
+  applyFind('');
+}
+
+/* ---------------- 刷新 / 自动刷新 ---------------- */
+let refreshProgressOff = null;
+let readableTotal = 0;   // 可读来源家数，扫描进度用
+/** 列表头状态文案：busy=true 时带呼吸点（刷新中），false 时还原普通计数 */
+function setListCount(text, busy = false){
+  const el = $('#listCount');
+  el.classList.toggle('busy', busy);
+  el.innerHTML = busy ? `<span class="spin3"><i></i><i></i><i></i></span>${esc(text)}` : esc(text);
+}
+/** 刷新的可见状态：按钮图标旋转、列表头呼吸点 + 实时阶段文案。
+ *  没有这些，扫描几十秒的刷新看起来就像程序卡死。 */
+function refreshUiBegin(){
+  const btn = $('#btnRefresh');
+  btn.classList.add('refreshing');
+  btn.disabled = true;
+  const seen = new Set();
+  setListCount('正在扫描会话来源…', true);
+  $('#stIndex').textContent = '刷新中…';
+  refreshProgressOff = api.onIndexProgress(p => {
+    let t = null;
+    if(p.kind === 'progress'){
+      seen.add(p.agent);
+      const pos = readableTotal ? `${seen.size}/${readableTotal}` : '';
+      t = p.skipped ? `核对中 ${pos} 跳过未变更…` : `扫描 ${p.agent} ${pos}…`;
+    }
+    else if(p.kind === 'prune') t = '清理已消失的会话…';
+    else if(p.kind === 'error') t = '部分会话解析失败，继续…';
+    if(t) setListCount(t, true);
+  });
+}
+function refreshUiEnd(prevText){
+  if(refreshProgressOff){ refreshProgressOff(); refreshProgressOff = null; }
+  const btn = $('#btnRefresh');
+  btn.classList.remove('refreshing');
+  btn.disabled = false;
+  if(prevText !== undefined) setListCount(prevText);
+}
+async function doRefresh(){
+  if(refreshing) return;
+  refreshing = true;
+  const prevCount = $('#listCount').classList.contains('busy') ? '' : $('#listCount').textContent;
+  refreshUiBegin();
+  try{
+    await startIndexShared({ force:false });   // 增量：无变化时几乎瞬时
+    await refreshStats();
+    refreshUiEnd(prevCount);
+
+    let freshCount = 0;
+    // 全局搜索激活时不重建列表，避免打断检索结果
+    if(!$('#q').value.trim()) freshCount = await loadList();
+
+    let note = '';
+    if(current){
+      const data = await api.show(current.uid);
+      if(data){
+        const nu = data.session.updated_at ?? data.session.updatedAt;
+        if(nu && nu !== current.sessionUpdatedAt){
+          if(detailHasSelection()){
+            // 用户正在选文字：不动详情 DOM，挂出提示等用户自己决定
+            pendingDetailRefresh = true;
+            $('#updChip').style.display = 'inline-block';
+            note = '当前会话有新内容（已暂缓载入以保护选区）';
+          } else {
+            current = { uid: current.uid, session: data.session, messages: data.messages, sessionUpdatedAt: nu };
+            seen.set(current.uid, nu); saveSeen();
+            pendingDetailRefresh = false; $('#updChip').style.display = 'none';
+            renderDetail(data, true);   // 内容确实变了：重建并保留滚动位置
+            note = '当前会话已更新';
+          }
+        } else if(pendingDetailRefresh && !detailHasSelection()){
+          // 之前暂缓过、现在选区已取消：补载入
+          current = { uid: current.uid, session: data.session, messages: data.messages, sessionUpdatedAt: nu ?? current.sessionUpdatedAt };
+          $('#updChip').style.display = 'none';
+          pendingDetailRefresh = false;
+          renderDetail(data, true);
+          note = '已载入暂缓的更新';
+        }
+      }
+    }
+
+    const t = new Date(); const p = (x)=>String(x).padStart(2,'0');
+    $('#stRefresh').textContent =
+      `上次刷新 ${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}` +
+      (freshCount ? ` · ${freshCount} 个会话有更新` : '') +
+      (note ? ` · ${note}` : '');
+  }catch(e){
+    $('#stRefresh').textContent = '刷新失败：' + e.message;
+  }finally{
+    refreshUiEnd();
+    refreshing = false;
+  }
+}
+function setAuto(on){
+  clearInterval(autoTimer); autoTimer = null;
+  localStorage.setItem('asv.auto', on ? '1' : '0');
+  if(on) autoTimer = setInterval(() => { doRefresh().catch(()=>{}); }, Number($('#autoEvery').value) * 1000);
+}
+
+/* ---------------- 对话框 ---------------- */
+function openDlg(html){ $('#dlgBody').innerHTML = html; $('#dlg').showModal(); }
+function closeDlg(){ $('#dlg').close(); }
+
+/* ---------------- 索引 ---------------- */
+$('#btnIndex').onclick = async () => {
+  const btn = $('#btnIndex');
+  btn.disabled = true; btn.textContent = '索引中…';
+  const off = api.onIndexProgress(p => {
+    if(p.kind==='progress') $('#stIndex').textContent = p.skipped ? '跳过未变更会话…' : `索引中 ${p.agent}…`;
+    else $('#stIndex').textContent = p.text;
+  });
+  try{
+    const r = await startIndexShared({ force:false });
+    openDlg(`<h3>索引完成</h3>
+      <div class="ok">会话 ${r.sessions} 个 · 新增/更新 ${r.indexed} · 未变更跳过 ${r.skipped}${r.pruned?` · 清理失效 ${r.pruned}`:''} · 失败 ${r.failed}</div>
+      <div class="row">消息 ${r.stats.messages} 条，耗时 ${(r.elapsedMs/1000).toFixed(1)}s，索引库 ${size(r.stats.dbSize)}</div>
+      <div class="foot"><button class="primary" onclick="closeDlg()">好</button></div>`);
+  }catch(e){
+    openDlg(`<h3>索引失败</h3><div class="warn">${esc(e.message)}</div>
+      <div class="foot"><button onclick="closeDlg()">关闭</button></div>`);
+  }finally{
+    off(); btn.disabled=false; btn.textContent='建索引';
+    await refreshStats(); await loadList();
+  }
+};
+
+/* ---------------- 备份 ---------------- */
+$('#btnBackup').onclick = async () => {
+  const agent = $('#agentFilter').value || null;
+  const off = api.onBackupProgress(()=>{ $('#stIndex').textContent='备份中…'; });
+  try{
+    const r = await api.backup({ agent });
+    if(r.canceled) return;
+    openDlg(`<h3>备份完成</h3>
+      <div class="ok">共 ${r.summary.sessions} 个会话、${r.summary.files} 个文件、${size(r.summary.bytes)}</div>
+      <div class="row"><code>${esc(r.out)}</code></div>
+      ${r.summary.errors?`<div class="warn">有 ${r.summary.errors} 个文件复制失败，详见 manifest.json</div>`:''}
+      <div class="foot"><button onclick="closeDlg()">关闭</button>
+        <button class="primary" onclick="api.openPath('${esc(r.out)}')">打开目录</button></div>`);
+  }catch(e){
+    openDlg(`<h3>备份失败</h3><div class="warn">${esc(e.message)}</div>
+      <div class="foot"><button onclick="closeDlg()">关闭</button></div>`);
+  }finally{ off(); await refreshStats(); }
+};
+
+/* ---------------- 还原 ---------------- */
+$('#btnRestore').onclick = () => {
+  openDlg(`<h3>还原备份</h3>
+    <div class="note">还原默认先做演练，确认清单后才写入。还原会写回 Agent 的原始数据目录，请务必核对路径。</div>
+    <div class="row"><button id="pkBak">选择备份目录…</button><code id="bakPath" style="font-size:12px">未选择</code></div>
+    <div class="row"><label><input type="checkbox" id="useTarget"> 重映射到其他家目录（跨机器还原）</label></div>
+    <div class="row" id="rowTarget" style="display:none"><button id="pkTgt">选择目标目录…</button><code id="tgtPath" style="font-size:12px">未选择</code></div>
+    <div id="restoreOut"></div>
+    <div class="foot"><button onclick="closeDlg()">取消</button><button id="btnPlan" disabled>演练</button></div>`);
+
+  let bak=null, tgt=null;
+  $('#pkBak').onclick = async () => { bak = await api.pickDir('选择备份目录'); if(bak){$('#bakPath').textContent=bak;$('#btnPlan').disabled=false;} };
+  $('#useTarget').onchange = (e) => { $('#rowTarget').style.display = e.target.checked?'flex':'none'; };
+  $('#pkTgt').onclick = async () => { tgt = await api.pickDir('选择目标家目录'); if(tgt) $('#tgtPath').textContent=tgt; };
+
+  $('#btnPlan').onclick = async () => {
+    try{
+      const p = await api.restorePlan({ dir: bak, target: tgt });
+      const items = p.items.slice(0,60).map(i =>
+        `<div>${i.conflict?'[覆盖]':'[新建]'} ${esc(i.dest)}</div>`).join('');
+      $('#restoreOut').innerHTML = `
+        <div class="ok">备份于 ${ts(p.manifest.createdAt)} · 源机 ${esc(p.manifest.host)} · ${p.sessions} 个会话 · ${p.items.length} 个文件 · ${size(p.bytes)}</div>
+        ${p.conflicts?`<div class="note">其中 ${p.conflicts} 个文件已存在，将被覆盖</div>`:''}
+        ${p.missing?`<div class="warn">备份内缺失 ${p.missing} 个文件</div>`:''}
+        <div class="list">${items}${p.items.length>60?`<div>… 其余 ${p.items.length-60} 个</div>`:''}</div>
+        <div class="foot"><label style="margin-right:auto"><input type="checkbox" id="ovw"> 允许覆盖已存在文件</label>
+          <button id="btnApply" class="primary">确认写入</button></div>`;
+      $('#btnApply').onclick = async () => {
+        const r = await api.restoreApply({ dir: bak, target: tgt, overwrite: $('#ovw').checked });
+        $('#restoreOut').innerHTML = `<div class="${r.failed?'warn':'ok'}">写入 ${r.written} · 跳过 ${r.skipped} · 失败 ${r.failed}</div>`;
+      };
+    }catch(e){
+      $('#restoreOut').innerHTML = `<div class="warn">${esc(e.message)}</div>`;
+    }
+  };
+};
+
+/* ---------------- 导出 / 迁移 ---------------- */
+$('#btnMd').onclick   = () => doExport('md');
+$('#btnHtml').onclick = () => doExport('html');
+async function doExport(fmt){
+  if(!current) return;
+  const r = await api.exportSession({ uid: current.uid, format: fmt });
+  if(r.canceled) return;
+  $('#stIndex').textContent = `已导出 ${size(r.bytes)} 到 ${r.file}`;
+  openDlg(`<h3>导出成功</h3><div class="ok">${esc(r.file)}（${size(r.bytes)}）</div>
+    <div class="foot"><button onclick="closeDlg()">关闭</button>
+      <button class="primary" onclick="api.openPath('${esc(r.file)}')">打开所在目录</button></div>`);
+}
+
+$('#btnMigrate').onclick = async () => {
+  if(!current) return;
+  const targets = await api.migrateTargets();
+  openDlg(`<h3>跨 Agent 迁移</h3>
+    <div class="warn">跨 Agent 迁移<b>只能保住用户消息与助手文本</b>。工具调用、工具结果、推理过程因格式不兼容会被剔除，无法恢复。需要完整内容请改用「导出 MD / HTML」。</div>
+    <div class="row">目标 Agent：<select id="migTo">${targets.map(t=>`<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></div>
+    <div class="row" id="migOut">尚未执行</div>
+    <div class="foot"><button onclick="closeDlg()">取消</button><button id="btnMigGo" class="primary">选择目录并迁移</button></div>`);
+  $('#btnMigGo').onclick = async () => {
+    const to = $('#migTo').value;
+    const r = await api.migrate({ uid: current.uid, to });
+    if(r.canceled) return;
+    const lost = r.report.lostBreakdown;
+    $('#migOut').innerHTML = `
+      <div class="ok">已产出 ${r.wroteMessages} 条文本消息</div>
+      <div class="list"><div>${esc(r.file)}</div><div>${esc(r.noteFile)}</div></div>
+      <div class="note">丢失：工具调用 ${lost.tool_call} 条、工具结果 ${lost.tool_result} 条、推理 ${lost.reasoning} 条（源会话共 ${lost.tool_call+lost.tool_result+lost.reasoning+r.wroteMessages} 条）<br>
+      下一步：把产出目录复制到 <code>${esc(r.target.projectRoot())}</code>。本工具不会改写目标 Agent 的索引库，其会话列表可能不会立即显示这条会话。</div>`;
+  };
+};
+
+/* ---------------- 事件绑定 ---------------- */
+// 全文检索是重操作（11 万+ 消息上跑 FTS/LIKE），逐键触发会卡。
+// 只在回车 / 点检索按钮时执行；输入过程只管清空按钮的显隐。
+$('#q').addEventListener('input', () => {
+  $('#btnQclear').style.display = $('#q').value ? 'inline-flex' : 'none';
+});
+$('#q').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter') doSearch();
+  else if(e.key === 'Escape'){
+    $('#q').value = '';
+    $('#btnQclear').style.display = 'none';
+    $('#modeHint').textContent = '';
+    loadList();
+  }
+});
+$('#btnSearch').onclick = () => doSearch();
+$('#btnQclear').onclick = () => {
+  $('#q').value = '';
+  $('#btnQclear').style.display = 'none';
+  $('#modeHint').textContent = '';
+  loadList();
+  $('#q').focus();
+};
+$('#agentFilter').addEventListener('change', () => {
+  if($('#q').value.trim()) doSearch(); else loadList();
+});
+$('#orderSel').addEventListener('change', loadList);
+
+/* 刷新 / 自动刷新 */
+$('#btnRefresh').onclick = () => { doRefresh().catch(()=>{}); };
+$('#autoEvery').onchange = (e) => {
+  localStorage.setItem('asv.autoEvery', e.target.value);
+  setAuto(Number(e.target.value) > 0);
+};
+$('#updChip').onclick = async () => {
+  if(!current) return;
+  $('#updChip').style.display = 'none';
+  const data = await api.show(current.uid);
+  if(!data) return;
+  const nu = data.session.updated_at ?? data.session.updatedAt;
+  current = { uid: current.uid, session: data.session, messages: data.messages, sessionUpdatedAt: nu };
+  seen.set(current.uid, nu); saveSeen();
+  pendingDetailRefresh = false;
+  renderDetail(data, true);
+};
+
+/* 会话内查找 */
+$('#findBox').addEventListener('input', () => {
+  clearTimeout(findTimer);
+  findTimer = setTimeout(() => applyFind($('#findBox').value.trim()), 200);
+});
+$('#findBox').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
+  else if(e.key === 'Escape') closeFind();
+});
+$('#btnFindNext').onclick = findNext;
+$('#btnFindPrev').onclick = findPrev;
+$('#btnFindClose').onclick = closeFind;
+
+document.addEventListener('keydown', e => {
+  if(e.key==='Escape' && $('#dlg').open) closeDlg();
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='f' && current && !$('#dlg').open){
+    e.preventDefault();
+    $('#findBar').style.display = 'flex';
+    $('#findBox').focus(); $('#findBox').select();
+  }
+});
+
+boot().catch(e => { $('#status').textContent = '初始化失败：' + e.message; });
+</script>
+</body>
+</html>

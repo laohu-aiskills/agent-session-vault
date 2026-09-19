@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+'use strict';
+
+// Windows 控制台默认代码页会导致中文输出乱码，这里显式把输出流设为 UTF-8
+try {
+  process.stdout.setDefaultEncoding && process.stdout.setDefaultEncoding('utf8');
+} catch { /* 某些终端不支持，忽略 */ }
+
+require('../src/cli').main(process.argv.slice(2)).catch((e) => {
+  console.error(`错误：${e.message}`);
+  process.exitCode = 1;
+});
