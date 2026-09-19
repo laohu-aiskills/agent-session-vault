@@ -81,6 +81,9 @@ function isNoiseText(t) {
   if (t.startsWith('# AGENTS.md')) return true;
   if (t.startsWith('<INSTRUCTIONS>')) return true;
   if (t.startsWith('<identity_context>')) return true;
+  if (t.startsWith('<skill ')) return true;          // Pi 等把技能注入也塞进用户正文
+  if (t.startsWith('<user-memory>')) return true;
+  if (t.startsWith('<environment_context>')) return true;
   return false;
 }
 

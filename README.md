@@ -31,6 +31,7 @@ All data stays on your machine. The tool never goes online and collects nothing.
 | `kimi-cli` | Kimi CLI | `~/.kimi/sessions/<工作区>/<会话>/wire.jsonl` | 4 会话 |
 | `kimi-code` | Kimi Code | `~/.kimi-code/sessions/<wd>/<会话>/agents/main/wire.jsonl` | 1 会话 |
 | `zcode` | ZCode | `~/.zcode/cli/db/db.sqlite`（`session`/`message`/`part` 表） | 1 会话 |
+| `pi` | Pi | `~/.pi/agent/sessions/<cwd-slug>/<时间>_<uuid>.jsonl` | 2 会话 |
 | `opencode` | opencode | 同 ZCode 的 SQLite 布局 | 未安装 |
 
 `asv agents` 会如实列出以上各家状态。另有三家**明确标注为受限**：
@@ -38,6 +39,7 @@ All data stays on your machine. The tool never goes online and collects nothing.
 - `cursor` — 磁盘仅有 `mcps` 目录，会话正文在其私有状态库内
 - `cline` — 仅有扩展状态文件，不含会话正文
 - `antigravity` — `brain` 目录为空
+- `copilot` — 仅 config.json 与运行日志，未见 session-state 会话目录
 
 这三家不是没做，而是**磁盘上根本没有可解析的会话文件**。工具宁可告诉你"读不到"也不会静默漏掉。
 
@@ -172,3 +174,18 @@ npm run verify
 - Kimi CLI 的工作区目录名无法反推项目路径（已实测排除 md5/sha1/sha256 路径哈希的可能），其 `projectPath` 会显示为未知。
 - 索引库与源数据体积相当（trigram 会为每个 3 字序列建倒排），本机 148 MB 源数据 → 150 MB 索引。如需瘦身可只索引 `text` 与 `reasoning` 两类，不索引工具结果。
 - `codebuddy` 与 `opencode` 的适配器已就位但本机无数据，标为"未实测"。
+
+## 与同类工具对比
+
+GitHub 上同类会话查看器不少（[claude-code-history-viewer](https://github.com/jhlee0409/claude-code-history-viewer)、[agentsview](https://github.com/itga/agentsview)、[sessionview](https://github.com/tyql688/sessionview)、[agent-session-viewer](https://github.com/dhruv-anand-aintech/agent-session-viewer) 等）。它们都做「看」，ASV 的差异点：
+
+| 能力 | ASV | 同类 |
+|---|---|---|
+| 查看会话 / 全文检索 | ✓ | ✓ |
+| **备份 + 还原**（sha256 清单、WAL 快照、三道安全门、跨机器家目录重映射） | ✓ | ✗ |
+| **跨 Agent 迁移**（目标方言产出 + 丢失清单） | ✓ | ✗ |
+| 零依赖单文件（`node:sqlite`，无原生模块、无 Docker） | ✓ | 多需 Docker / Go / Rust 构建 |
+| 受限来源如实说明原因，而非静默跳过 | ✓ | — |
+| Agent 覆盖数量 | 8 家可读 + 4 家受限标注 | 最多 29 家 |
+
+各家会话格式的详细档案（行类型、字段、token 统计位置）见 [docs/providers.md](docs/providers.md)——新写适配器从这里起步。

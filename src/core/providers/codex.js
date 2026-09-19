@@ -160,12 +160,24 @@ class CodexProvider {
   async parse(session) {
     const msgs = [];
     let seq = 0;
+    // event_msg/token_count 的 info.total_token_usage 是会话累计值，取末次即为全量
+    let totals = null;
     await eachLine(session.sourcePath, (line) => {
       const obj = tryParse(line);
       if (!obj) return;
       const ts = toMs(obj.timestamp);
       const payload = obj.payload;
       if (!payload || typeof payload !== 'object') return;
+
+      if (obj.type === 'event_msg' && payload.type === 'token_count'
+          && payload.info && payload.info.total_token_usage) {
+        const u = payload.info.total_token_usage;
+        totals = {
+          input: u.input_tokens, output: u.output_tokens,
+          cacheRead: u.cached_input_tokens, cacheWrite: u.cache_write_input_tokens,
+          total: u.total_tokens,
+        };
+      }
 
       let produced = [];
       if (obj.type === 'response_item') {
@@ -184,7 +196,7 @@ class CodexProvider {
       for (const m of produced) msgs.push(m);
       if (produced.length) seq = produced[produced.length - 1].seq + 1;
     });
-    return { messages: msgs, title: null };
+    return { messages: msgs, title: null, meta: totals ? { tokens: totals } : null };
   }
 
   originalPaths(session) {

@@ -303,6 +303,11 @@ const AGENT_SVG = {
     <circle cx="10" cy="12" r="1.4" fill="#0f6e56"/><circle cx="14" cy="12" r="1.4" fill="#0f6e56"/>`,
   'antigravity': `<circle cx="12" cy="12" r="5.5" fill="none" stroke="#8a63d2" stroke-width="2.2"/>
     <ellipse cx="12" cy="12" rx="10" ry="3.5" fill="none" stroke="#8a63d2" stroke-width="1.6" transform="rotate(-18 12 12)"/>`,
+  'pi': `<circle cx="12" cy="12" r="9" fill="none" stroke="#c96f2f" stroke-width="2.2"/>
+    <text x="12" y="16.5" text-anchor="middle" font-size="12" font-family="Georgia,serif" fill="#c96f2f">π</text>`,
+  'copilot': `<path d="M3.5 12a8.5 8.5 0 0 1 17 0" fill="none" stroke="#6e7781" stroke-width="2.4"/>
+    <circle cx="8.5" cy="13.5" r="1.8" fill="#6e7781"/><circle cx="15.5" cy="13.5" r="1.8" fill="#6e7781"/>
+    <path d="M9.5 17h5" stroke="#6e7781" stroke-width="2" stroke-linecap="round"/>`,
 };
 const AGENT_SVG_DEFAULT = `<path d="M4 5h16v11H9l-5 4z" fill="none" stroke="#888780" stroke-width="2.4" stroke-linejoin="round"/>`;
 let agentLabels = {};   // id → 展示名，refreshAgents 时填充
@@ -312,6 +317,18 @@ function agentIcon(id, size = 12){
 }
 function agentBadge(id){
   return `<span class="pill blue">${agentIcon(id)}${esc(agentLabels[id] || id)}</span>`;
+}
+/* 会话元数据：索引行给 meta_json 字符串，live 解析给对象 */
+function parseMeta(s){
+  if(!s) return {};
+  if(typeof s.meta_json === 'string'){ try{ return JSON.parse(s.meta_json||'{}')||{}; }catch{ return {}; } }
+  return s.meta || {};
+}
+function fmtTok(n){
+  if(!Number.isFinite(n) || n <= 0) return '';
+  if(n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if(n >= 1e3) return (n/1e3).toFixed(1)+'k';
+  return String(Math.round(n));
 }
 
 /* ---------------- 初始化 ---------------- */
@@ -397,11 +414,13 @@ function renderList(rows, fresh){
     d.className = 'item' + (fresh.has(r.uid) ? ' fresh' : '');
     d.dataset.uid = r.uid;
     if(current && r.uid === current.uid) d.classList.add('active');
+    const tk = (parseMeta(r).tokens || {}).total;
     d.innerHTML = `
       <div class="t">${fresh.has(r.uid)?'<span class="pill new">新更新</span> ':''}${esc(r.title || '(无标题)')}</div>
       <div class="m">
         ${agentBadge(r.agent)}
         <span>${r.msg_count} 条</span>
+        ${tk?`<span title="token 总量">≈${fmtTok(tk)} tok</span>`:''}
         <span>${ts(r.updated_at)}</span>
       </div>
       <div class="m" style="margin-top:2px"><span style="font-size:11px">${esc(r.project_path||'未知项目')}</span></div>`;
@@ -481,6 +500,7 @@ function renderDetail(data, keepScroll = false){
   const keep = box.scrollTop;
   const s = data.session;
   $('#detailTitle').innerHTML = `${agentIcon(s.agent, 14)}${esc(s.title || '(无标题)')}`;
+  const tk = parseMeta(s).tokens || null;
   const meta = `
     <div class="meta"><table>
       <tr><td>Agent</td><td>${agentIcon(s.agent, 13)} <code title="标识：${esc(s.agent)}">${esc(agentLabels[s.agent] || s.agent)}</code>${data.source==='live'?' <span class="pill">现场解析</span>':''}</td></tr>
@@ -488,6 +508,7 @@ function renderDetail(data, keepScroll = false){
       <tr><td>项目路径</td><td><code>${esc(s.project_path||s.projectPath||'未知')}</code></td></tr>
       <tr><td>创建 / 更新</td><td>${ts(s.created_at||s.createdAt)} / ${ts(s.updated_at||s.updatedAt)}</td></tr>
       <tr><td>消息条数</td><td>${data.messages.length}</td></tr>
+      ${tk&&tk.total?`<tr><td>Tokens</td><td>输入 ${fmtTok(tk.input)||0} · 输出 ${fmtTok(tk.output)||0} · 缓存 ${fmtTok((tk.cacheRead||0)+(tk.cacheWrite||0))||0} · 共 ${fmtTok(tk.total)}${Number(tk.costUsd)>0?` · ≈$${tk.costUsd.toFixed(2)}`:''}</td></tr>`:''}
     </table></div>`;
 
   const parts = [meta];

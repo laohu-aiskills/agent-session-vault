@@ -337,6 +337,10 @@ class JsonlProjectProvider {
     const msgs = [];
     let seq = 0;
     let derived = null;
+    // Claude 系在 assistant 行的 message.usage 里带逐条 token 计数，累加成会话统计
+    const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+    const n = (v) => (Number.isFinite(v) ? v : 0);
+    let sawUsage = false;
     await eachLine(session.sourcePath, (line) => {
       const obj = tryParse(line);
       if (!obj) return; // 脏尾行/截断行：跳过，不中断整个会话
@@ -346,8 +350,19 @@ class JsonlProjectProvider {
         for (const m of produced) msgs.push(m);
       }
       if (obj.type === 'ai-title' && obj.aiTitle) derived = obj.aiTitle;
+      const u = obj.message && obj.message.usage;
+      if (u && typeof u === 'object') {
+        sawUsage = true;
+        tokens.input += n(u.input_tokens);
+        tokens.output += n(u.output_tokens);
+        tokens.cacheRead += n(u.cache_read_input_tokens);
+        tokens.cacheWrite += n(u.cache_creation_input_tokens);
+        tokens.total += n(u.input_tokens) + n(u.output_tokens)
+          + n(u.cache_read_input_tokens) + n(u.cache_creation_input_tokens);
+      }
     });
-    return { messages: msgs, title: derived };
+    const meta = sawUsage ? { tokens } : null;
+    return { messages: msgs, title: derived, meta };
   }
 
   /** 备份时需要原样打包的路径 */

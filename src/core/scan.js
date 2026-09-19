@@ -90,9 +90,11 @@ async function buildIndex({ providers, index, force = false, onProgress = () => 
           continue;
         }
         try {
-          const { messages, title } = await p.parse(session);
+          const { messages, title, meta } = await p.parse(session);
           if (!session.title && title) session.title = title;
           if (!session.title && messages.length) session.title = deriveTitle(messages);
+          // parse 阶段才能拿到的元数据（如逐行累计的 token usage）合并回会话
+          if (meta && typeof meta === 'object') session.meta = { ...session.meta, ...meta };
           index.putSession(session, messages);
           indexed += 1;
           totalMsgs += messages.length;

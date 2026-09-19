@@ -6,6 +6,7 @@ const { JsonlProjectProvider } = require('./jsonl-project');
 const { CodexProvider } = require('./codex');
 const { KimiCliProvider, KimiCodeProvider } = require('./kimi');
 const { SqliteOpencodeProvider } = require('./sqlite-opencode');
+const { PiProvider } = require('./pi');
 const { RestrictedProvider } = require('./restricted');
 
 const home = (p) => path.join(os.homedir(), p);
@@ -65,6 +66,13 @@ const providers = [
       '~/.opencode/db/db.sqlite',
     ],
   }),
+  new PiProvider(),
+  new RestrictedProvider({
+    id: 'copilot',
+    label: 'Copilot CLI',
+    probePath: '~/.copilot',
+    reason: '本机仅有 config.json 与运行日志，未见 session-state 会话目录（该工具的会话落盘位置，未产生数据）',
+  }),
   new RestrictedProvider({
     id: 'cursor',
     label: 'Cursor',
@@ -87,7 +95,7 @@ const providers = [
 
 /** 实测验证过的 Provider（用本机真实数据跑通 discover + parse） */
 const VERIFIED = new Set([
-  'workbuddy', 'claude-code', 'qwenworkcn', 'codex', 'kimi-cli', 'kimi-code', 'zcode',
+  'workbuddy', 'claude-code', 'qwenworkcn', 'codex', 'kimi-cli', 'kimi-code', 'zcode', 'pi',
 ]);
 
 function all() {
