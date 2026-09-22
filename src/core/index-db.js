@@ -219,11 +219,12 @@ class IndexDb {
    * 全文检索。自动选择通道：
    *   query 长度 >= 3 → FTS5 trigram MATCH
    *   query 长度 <= 2 → LIKE 扫描
-   * @returns {{mode:'fts'|'like', hits: object[]}}
+   * 结果按会话聚合：同一会话只出一条，match_count 记录该会话内命中的消息数。
+   * @returns {{mode:'fts'|'like', hits: object[], total_matches: number, truncated: boolean}}
    */
   search(query, { agent = null, project = null, kinds = null, limit = 30 } = {}) {
     const q = String(query || '').trim();
-    if (!q) return { mode: 'fts', hits: [] };
+    if (!q) return { mode: 'fts', hits: [], total_matches: 0, truncated: false };
 
     const filters = [];
     const fargs = [];
@@ -234,6 +235,10 @@ class IndexDb {
       fargs.push(...kinds);
     }
     const filterSql = filters.length ? 'and ' + filters.join(' and ') : '';
+
+    // 聚合前先取到足够多的命中消息（上限内 JS 端 group），
+    // 直接 SQL group by 会丢掉「该会话第一条命中消息」的确定性行
+    const rawLimit = 2000;
 
     if (q.length >= 3) {
       // FTS5 MATCH：把查询包成短语，避免特殊字符被当作查询语法
@@ -247,21 +252,31 @@ class IndexDb {
         where messages_fts match ? ${filterSql}
         order by s.updated_at desc, m.seq asc
         limit ?`;
-      const hits = this.db.prepare(sql).all(phrase, ...fargs, limit);
-      return { mode: 'fts', hits };
+      var rows = this.db.prepare(sql).all(phrase, ...fargs, rawLimit);
+    } else {
+      // 短查询兜底：trigram 无法处理 1-2 字符，只能全表扫描
+      const sql = `
+        select s.uid, s.agent, s.title, s.project_path, s.updated_at, s.source_path,
+               m.seq, m.role, m.kind, m.ts, m.text
+        from messages m
+        join sessions s on s.uid = m.uid
+        where m.text like ? ${filterSql}
+        order by s.updated_at desc, m.seq asc
+        limit ?`;
+      var rows = this.db.prepare(sql).all(`%${q}%`, ...fargs, rawLimit);
     }
 
-    // 短查询兜底：trigram 无法处理 1-2 字符，只能全表扫描
-    const sql = `
-      select s.uid, s.agent, s.title, s.project_path, s.updated_at, s.source_path,
-             m.seq, m.role, m.kind, m.ts, m.text
-      from messages m
-      join sessions s on s.uid = m.uid
-      where m.text like ? ${filterSql}
-      order by s.updated_at desc, m.seq asc
-      limit ?`;
-    const hits = this.db.prepare(sql).all(`%${q}%`, ...fargs, limit);
-    return { mode: 'like', hits };
+    const byUid = new Map();
+    let total = 0;
+    for (const r of rows) {
+      total += 1;
+      const cur = byUid.get(r.uid);
+      if (cur) cur.match_count += 1;
+      else byUid.set(r.uid, { ...r, match_count: 1 });
+    }
+    // rows 已按 updated_at desc 排序，Map 保持插入序即所需序
+    const hits = [...byUid.values()].slice(0, limit);
+    return { mode: q.length >= 3 ? 'fts' : 'like', hits, total_matches: total, truncated: rows.length >= rawLimit };
   }
 }
 

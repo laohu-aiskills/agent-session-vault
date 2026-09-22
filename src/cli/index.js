@@ -249,7 +249,7 @@ async function cmdSearch(flags, positional) {
   const index = openIndex(flags);
   const kinds = flags.kind ? String(flags.kind).split(',').map((s) => s.trim()).filter(Boolean) : null;
   const t0 = Date.now();
-  const { mode, hits } = index.search(query, {
+  const { mode, hits, total_matches: totalMatches, truncated } = index.search(query, {
     agent: flags.agent || null,
     project: flags.project || null,
     kinds,
@@ -257,7 +257,7 @@ async function cmdSearch(flags, positional) {
   });
   const ms = Date.now() - t0;
 
-  if (flags.json) { console.log(JSON.stringify({ mode, ms, hits }, null, 2)); index.close(); return; }
+  if (flags.json) { console.log(JSON.stringify({ mode, ms, hits, total_matches: totalMatches, truncated }, null, 2)); index.close(); return; }
 
   if (!hits.length) {
     console.log(yellow(`未命中：${query}`));
@@ -268,9 +268,9 @@ async function cmdSearch(flags, positional) {
     return;
   }
 
-  console.log(bold(`命中 ${hits.length} 条`) + dim(`  ${ms}ms · ${mode === 'fts' ? '索引检索(trigram)' : '全表扫描(短查询兜底)'}`) + '\n');
+  console.log(bold(`命中 ${hits.length} 个会话 · ${totalMatches} 处消息`) + dim(`  ${ms}ms · ${mode === 'fts' ? '索引检索(trigram)' : '全表扫描(短查询兜底)'}`) + (truncated ? dim('（已截断）') : '') + '\n');
   for (const h of hits) {
-    console.log(`${blue(h.agent)} ${bold((h.title || '(无标题)').slice(0, 46))}`);
+    console.log(`${blue(h.agent)} ${bold((h.title || '(无标题)').slice(0, 46))}${h.match_count > 1 ? dim(`  ${h.match_count} 处`) : ''}`);
     console.log(`  ${dim(`${ROLE_LABEL[h.role] || h.role} · ${KIND_LABEL[h.kind] || h.kind} · ${formatTime(h.ts)}`)}`);
     console.log(`  ${makeSnippet(h.text, query)}`);
     console.log(`  ${dim(h.uid)}`);

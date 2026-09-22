@@ -436,9 +436,9 @@ async function doSearch(){
   if(!q){ await loadList(); $('#modeHint').textContent=''; return; }
   setListCount('检索中…', true);
   const agent = $('#agentFilter').value || null;
-  const { mode, hits } = await api.search({ query: q, agent, limit: 200 });
+  const { mode, hits, total_matches, truncated } = await api.search({ query: q, agent, limit: 200 });
   $('#modeHint').textContent = mode==='fts' ? '索引检索' : '全表扫描（短查询）';
-  setListCount(`命中 ${hits.length} 条`);
+  setListCount(`命中 ${hits.length} 个会话 · ${total_matches} 处消息${truncated?'（已截断）':''}`);
   const box = $('#list');
   box.innerHTML = '';
   if(!hits.length){ box.innerHTML = '<div class="empty">没有匹配的消息</div>'; return; }
@@ -450,6 +450,7 @@ async function doSearch(){
     d.innerHTML = `
       <div class="t">${esc(h.title || '(无标题)')}</div>
       <div class="m">${agentBadge(h.agent)}
+        ${h.match_count>1?`<span class="pill">${h.match_count} 处</span>`:''}
         <span>${esc(ROLE[h.role]||h.role)}${KIND[h.kind]?' · '+KIND[h.kind]:''}</span>
         <span>${ts(h.ts)}</span></div>
       <div class="m" style="margin-top:3px"><span style="color:#5f5e5a">${esc(snippet(h.text,q))}</span></div>`;
@@ -477,8 +478,7 @@ async function openSession(uid, el){
   seen.set(uid, current.sessionUpdatedAt); saveSeen();
   pendingDetailRefresh = false; $('#updChip').style.display='none';
   ['btnMd','btnHtml','btnMigrate'].forEach(id=>$('#'+id).disabled=false);
-  renderDetail(data);
-  $('#detail').scrollTop = 0;
+  await renderDetail(data);
 
   $('#findBar').style.display = 'flex';
   $('#findBox').value = ''; applyFind('');
@@ -495,7 +495,27 @@ async function openSession(uid, el){
  * 渲染详情。keepScroll=true 时保留滚动位置（刷新场景）；
  * 若查找框有关键词，渲染后自动重挂高亮并尽量停在原命中位置
  */
-function renderDetail(data, keepScroll = false){
+const DETAIL_BATCH = 200;   // 每批渲染条数：几千条消息一次 innerHTML 会把渲染线程卡死
+const DETAIL_MAX = 800;     // 默认渲染上限，超出走「继续渲染」
+let renderEpoch = 0;        // 会话切换/再次刷新时，作废还在排队的老批次
+function msgHtml(m){
+  const kind = KIND[m.kind]||m.kind;
+  let body;
+  if(m.kind==='tool_call'){
+    body = `<div class="toolname">${esc(m.tool_name||m.toolName||'工具')}</div><pre>${esc(pretty(m.text).slice(0,20000))}</pre>`;
+  } else if(m.kind==='tool_result'){
+    body = `<pre>${esc(String(m.text||'').slice(0,20000))}</pre>`;
+  } else if(m.kind==='reasoning'){
+    body = `<details><summary>展开推理过程</summary><pre>${esc(m.text||'')}</pre></details>`;
+  } else {
+    body = `<div class="body">${esc(m.text||'')}</div>`;
+  }
+  return `<div class="msg ${m.role}">
+    <div class="mh"><span class="seq">${m.seq}</span><span class="role">${esc(ROLE[m.role]||m.role)}</span>
+    ${kind?`<span class="pill">${kind}</span>`:''}<span class="ts">${ts(m.ts)}</span></div>${body}</div>`;
+}
+async function renderDetail(data, keepScroll = false){
+  const epoch = ++renderEpoch;
   const box = $('#detail');
   const keep = box.scrollTop;
   const s = data.session;
@@ -511,25 +531,42 @@ function renderDetail(data, keepScroll = false){
       ${tk&&tk.total?`<tr><td>Tokens</td><td>输入 ${fmtTok(tk.input)||0} · 输出 ${fmtTok(tk.output)||0} · 缓存 ${fmtTok((tk.cacheRead||0)+(tk.cacheWrite||0))||0} · 共 ${fmtTok(tk.total)}${Number(tk.costUsd)>0?` · ≈$${tk.costUsd.toFixed(2)}`:''}</td></tr>`:''}
     </table></div>`;
 
-  const parts = [meta];
-  for(const m of data.messages){
-    const kind = KIND[m.kind]||m.kind;
-    let body;
-    if(m.kind==='tool_call'){
-      body = `<div class="toolname">${esc(m.tool_name||m.toolName||'工具')}</div><pre>${esc(pretty(m.text))}</pre>`;
-    } else if(m.kind==='tool_result'){
-      body = `<pre>${esc(String(m.text||'').slice(0,20000))}</pre>`;
-    } else if(m.kind==='reasoning'){
-      body = `<details><summary>展开推理过程</summary><pre>${esc(m.text||'')}</pre></details>`;
-    } else {
-      body = `<div class="body">${esc(m.text||'')}</div>`;
-    }
-    parts.push(`<div class="msg ${m.role}">
-      <div class="mh"><span class="seq">${m.seq}</span><span class="role">${esc(ROLE[m.role]||m.role)}</span>
-      ${kind?`<span class="pill">${kind}</span>`:''}<span class="ts">${ts(m.ts)}</span></div>${body}</div>`);
+  const msgs = data.messages;
+  const hardCap = Math.min(msgs.length, DETAIL_MAX);
+  const first = msgs.slice(0, Math.min(DETAIL_BATCH, hardCap));
+  box.innerHTML = meta + first.map(msgHtml).join('');
+  box.scrollTop = keepScroll ? keep : 0;
+
+  // 分批续染：每批之间让出主线程一次，页面保持可交互
+  for(let i = first.length; i < hardCap; i += DETAIL_BATCH){
+    await new Promise(r => setTimeout(r, 0));
+    if(epoch !== renderEpoch) return;
+    box.insertAdjacentHTML('beforeend', msgs.slice(i, i + DETAIL_BATCH).map(msgHtml).join(''));
   }
-  box.innerHTML = parts.join('');
-  if(keepScroll) box.scrollTop = keep;
+  if(epoch !== renderEpoch) return;
+
+  if(msgs.length > hardCap){
+    const note = document.createElement('div');
+    note.className = 'empty';
+    const info = document.createElement('div');
+    info.textContent = `会话共 ${msgs.length} 条消息，已渲染前 ${hardCap} 条（其余用会话内查找定位）。`;
+    const btn = document.createElement('button');
+    btn.textContent = '继续渲染后续消息';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const myEpoch = epoch;
+      for(let i = hardCap; i < msgs.length; i += DETAIL_BATCH){
+        await new Promise(r => setTimeout(r, 0));
+        if(myEpoch !== renderEpoch) return;
+        box.insertAdjacentHTML('beforeend', msgs.slice(i, i + DETAIL_BATCH).map(msgHtml).join(''));
+      }
+      if(myEpoch !== renderEpoch) return;
+      note.remove();
+    };
+    note.appendChild(info); note.appendChild(btn);
+    box.appendChild(note);
+  }
+
   const q = $('#findBox').value.trim();
   if(q) applyFind(q, { keepIdx:true });
 }
@@ -724,7 +761,7 @@ async function doRefresh(){
             current = { uid: current.uid, session: data.session, messages: data.messages, sessionUpdatedAt: nu };
             seen.set(current.uid, nu); saveSeen();
             pendingDetailRefresh = false; $('#updChip').style.display = 'none';
-            renderDetail(data, true);   // 内容确实变了：重建并保留滚动位置
+            await renderDetail(data, true);   // 内容确实变了：重建并保留滚动位置
             note = '当前会话已更新';
           }
         } else if(pendingDetailRefresh && !detailHasSelection()){
@@ -916,7 +953,7 @@ $('#updChip').onclick = async () => {
   current = { uid: current.uid, session: data.session, messages: data.messages, sessionUpdatedAt: nu };
   seen.set(current.uid, nu); saveSeen();
   pendingDetailRefresh = false;
-  renderDetail(data, true);
+  await renderDetail(data, true);
 };
 
 /* 会话内查找 */
