@@ -162,6 +162,7 @@ async function cmdList(flags) {
     project: flags.project || null,
     limit,
     order: flags.order === 'created' ? 'created' : 'updated',
+    dir: flags.dir === 'asc' ? 'asc' : 'desc',
   });
   if (flags.json) { console.log(JSON.stringify(rows, null, 2)); index.close(); return; }
 
@@ -433,8 +434,9 @@ ${bold('命令')}
   index       [--force] [--agent X]
                                   建/更新全文索引（默认增量，--force 全量重建）
   stats       [--json]            查看索引库概览
-  list        [--agent X] [--project P] [--limit N] [--order created|updated] [--json]
-                                  列出会话
+  list        [--agent X] [--project P] [--limit N] [--order created|updated]
+              [--dir asc|desc] [--json]
+                                  列出会话（--dir 排序方向，默认倒序）
   show        <uid|会话id> [--full] [--limit N] [--json]
                                   查看某会话的消息流
   search      <关键词> [--agent X] [--kind text,reasoning,tool_call,tool_result]

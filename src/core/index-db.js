@@ -181,14 +181,15 @@ class IndexDb {
     };
   }
 
-  listSessions({ agent = null, project = null, limit = 50, offset = 0, order = 'updated' } = {}) {
+  listSessions({ agent = null, project = null, limit = 50, offset = 0, order = 'updated', dir = 'desc' } = {}) {
     const where = [];
     const args = [];
     if (agent) { where.push('agent = ?'); args.push(agent); }
     if (project) { where.push('(project_path like ? or title like ?)'); args.push(`%${project}%`, `%${project}%`); }
-    const orderSql = order === 'created' ? 'created_at desc' : 'updated_at desc';
+    const col = order === 'created' ? 'created_at' : 'updated_at';
+    const dirSql = String(dir).toLowerCase() === 'asc' ? 'asc' : 'desc';
     const sql = `select * from sessions ${where.length ? 'where ' + where.join(' and ') : ''}
-                 order by ${orderSql} limit ? offset ?`;
+                 order by ${col} ${dirSql} limit ? offset ?`;
     return this.db.prepare(sql).all(...args, limit, offset);
   }
 

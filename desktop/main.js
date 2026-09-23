@@ -279,6 +279,7 @@ ipcMain.handle('list', async (ev, opts = {}) => withIndex((idx) => ({
     project: opts.project || null,
     limit: opts.limit || 100,
     order: opts.order || 'updated',
+    dir: opts.dir === 'asc' ? 'asc' : 'desc',
   }),
   total: idx.stats().sessions,
 })));

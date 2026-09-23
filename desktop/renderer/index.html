@@ -54,6 +54,7 @@ main{flex:1;display:flex;min-height:0}
 .iconbtn{width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;
   border:none;background:transparent;color:var(--txt2);border-radius:7px}
 .iconbtn:hover{background:#f0f0ec;color:var(--txt)}
+.iconbtn.on{background:var(--blue-bg);color:var(--blue)}
 .spin3{display:inline-flex;gap:2.5px;flex:0 0 auto}
 .spin3 i{width:4px;height:4px;border-radius:50%;background:var(--txt3);animation:pulse3 1s infinite}
 .spin3 i:nth-child(2){animation-delay:.15s}
@@ -183,6 +184,12 @@ mark.find.cur{background:#e07a1f;color:#fff}
           <option value="30">30秒</option>
           <option value="60">60秒</option>
         </select>
+        <button id="btnDir" class="iconbtn" title="切换正序/倒序（当前：新→旧）">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 3v18M7 21l-4-4M7 21l4-4M17 21V3M17 3l-4 4M17 3l4 4"/>
+          </svg>
+        </button>
         <button id="btnRefresh" class="iconbtn" title="刷新列表与当前会话（增量，保留滚动位置与选区）">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -227,6 +234,7 @@ mark.find.cur{background:#e07a1f;color:#fff}
 const $ = (s) => document.querySelector(s);
 const api = window.asv;
 let current = null;
+let listDir = localStorage.getItem('asv.dir') === 'asc' ? 'asc' : 'desc';   // 列表排序方向
 
 /* ---------------- 刷新 / 查找 状态 ---------------- */
 let lastRows = new Map();   // uid → 上次见过的 updated_at（跨过滤条件保留，避免切换筛选误报）
@@ -386,7 +394,7 @@ async function refreshStats(){
 async function loadList(){
   const agent = $('#agentFilter').value || null;
   const order = $('#orderSel').value;
-  const { rows, total } = await api.list({ agent, order, limit: 200 });
+  const { rows, total } = await api.list({ agent, order, dir: listDir, limit: 200 });
   setListCount(`显示 ${rows.length} / 共 ${total}`);
 
   // 与上次快照对比：更新时间变化或新出现的会话标记为「有更新」。
@@ -444,6 +452,7 @@ async function doSearch(){
   setListCount('检索中…', true);
   const agent = $('#agentFilter').value || null;
   const { mode, hits, total_matches, truncated } = await api.search({ query: q, agent, limit: 200 });
+  if(listDir === 'asc') hits.reverse();   // 检索结果跟随当前排序方向
   $('#modeHint').textContent = mode==='fts' ? '索引检索' : '全表扫描（短查询）';
   setListCount(`命中 ${hits.length} 个会话 · ${total_matches} 处消息${truncated?'（已截断）':''}`);
   const box = $('#list');
@@ -675,6 +684,11 @@ function highlightCurrent(){
     p = p.parentNode;
   }
   m.scrollIntoView({ block:'center' });
+}
+function updateDirBtn(){
+  const btn = $('#btnDir');
+  btn.classList.toggle('on', listDir === 'asc');
+  btn.title = listDir === 'asc' ? '当前：正序（旧→新），点击切回倒序' : '当前：倒序（新→旧），点击切到正序';
 }
 function updateFindCount(){
   const el = $('#findCount');
@@ -948,7 +962,16 @@ $('#btnQclear').onclick = () => {
 $('#agentFilter').addEventListener('change', () => {
   if($('#q').value.trim()) doSearch(); else loadList();
 });
-$('#orderSel').addEventListener('change', loadList);
+$('#orderSel').addEventListener('change', () => {
+  if($('#q').value.trim()) doSearch(); else loadList();
+});
+$('#btnDir').onclick = () => {
+  listDir = listDir === 'asc' ? 'desc' : 'asc';
+  localStorage.setItem('asv.dir', listDir);
+  updateDirBtn();
+  if($('#q').value.trim()) doSearch(); else loadList();
+};
+updateDirBtn();
 
 /* 刷新 / 自动刷新 */
 $('#btnRefresh').onclick = () => { doRefresh().catch(()=>{}); };
