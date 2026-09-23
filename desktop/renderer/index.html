@@ -197,6 +197,7 @@ mark.find.cur{background:#e07a1f;color:#fff}
     <div id="detailBar">
       <span id="detailTitle">未选择会话</span>
       <button id="updChip" type="button" title="刷新时检测到本会话有新内容，但你正在选择文字，已暂缓载入">● 有新内容，点击载入</button>
+      <button id="btnTerm" disabled title="在会话的项目目录打开终端；支持的 CLI 会自动带上续接命令">终端继续</button>
       <button id="btnMd" disabled>导出 MD</button>
       <button id="btnHtml" disabled>导出 HTML</button>
       <button id="btnMigrate" disabled>迁移</button>
@@ -330,6 +331,12 @@ function fmtTok(n){
   if(n >= 1e3) return (n/1e3).toFixed(1)+'k';
   return String(Math.round(n));
 }
+/* 「终端继续」：各 CLI 的会话续接命令。只登记有把握的写法，
+ * 其余 agent 打开终端后停在项目目录，命令由用户自己敲。 */
+const RESUME_CMD = {
+  'claude-code': (sid) => `claude --resume ${sid}`,
+  'codex':       (sid) => `codex resume ${sid}`,
+};
 
 /* ---------------- 初始化 ---------------- */
 async function boot(){
@@ -478,6 +485,11 @@ async function openSession(uid, el){
   seen.set(uid, current.sessionUpdatedAt); saveSeen();
   pendingDetailRefresh = false; $('#updChip').style.display='none';
   ['btnMd','btnHtml','btnMigrate'].forEach(id=>$('#'+id).disabled=false);
+  const projDir = s.project_path || s.projectPath;
+  $('#btnTerm').disabled = !projDir;
+  $('#btnTerm').title = !projDir
+    ? '该会话没有项目目录信息'
+    : (RESUME_CMD[s.agent] ? `在项目目录打开终端并执行：${RESUME_CMD[s.agent](s.session_id||s.sessionId)}` : '在项目目录打开终端（该 CLI 的续接命令未知，请自行输入）');
   await renderDetail(data);
 
   $('#findBar').style.display = 'flex';
@@ -966,6 +978,19 @@ $('#findBox').addEventListener('keydown', (e) => {
   else if(e.key === 'Escape') closeFind();
 });
 $('#btnFindNext').onclick = findNext;
+$('#btnTerm').onclick = async () => {
+  if(!current) return;
+  const s = current.session;
+  const dir = s.project_path || s.projectPath;
+  if(!dir){ $('#stRefresh').textContent = '该会话没有项目目录信息，无法打开终端'; return; }
+  const sid = s.session_id || s.sessionId;
+  const gen = RESUME_CMD[s.agent];
+  const command = gen && sid ? gen(sid) : '';
+  const r = await api.openTerminal({ dir, command });
+  $('#stRefresh').textContent = r.ok
+    ? `已打开终端（${r.via === 'wt' ? 'Windows Terminal' : 'cmd'}）${command ? '：' + command : '：' + dir}`
+    : '打开终端失败：' + (r.error || '未知错误');
+};
 $('#btnFindPrev').onclick = findPrev;
 $('#btnFindClose').onclick = closeFind;
 

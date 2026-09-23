@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { spawn } = require('child_process');
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 
@@ -372,4 +373,34 @@ ipcMain.handle('migrateTargets', async () => Object.values(TARGETS).map((t) => (
 ipcMain.handle('openPath', async (ev, p) => {
   if (fs.existsSync(p)) { await shell.openPath(path.dirname(p)); return true; }
   return false;
+});
+
+/**
+ * 在指定目录打开终端（供「终端继续」用：cd 到会话项目目录，直接续接 CLI 会话）。
+ * 优先 Windows Terminal，未安装回退传统 cmd 窗口。
+ * command 为空时只 cd 不执行命令。
+ */
+ipcMain.handle('openTerminal', async (ev, { dir, command }) => {
+  if (!dir || !fs.existsSync(dir)) return { ok: false, error: `目录不存在：${dir}` };
+  const cmdline = command ? `cd /d "${dir}" && ${command}` : `cd /d "${dir}"`;
+  return new Promise((resolve) => {
+    try {
+      const wt = spawn('wt.exe', ['-d', dir, 'cmd.exe', '/k', command || ''], {
+        detached: true, stdio: 'ignore',
+      });
+      wt.once('spawn', () => resolve({ ok: true, via: 'wt' }));
+      wt.once('error', () => {
+        try {
+          spawn('cmd.exe', ['/c', 'start', '', 'cmd.exe', '/k', cmdline], {
+            detached: true, stdio: 'ignore',
+          }).unref();
+          resolve({ ok: true, via: 'cmd' });
+        } catch (e) {
+          resolve({ ok: false, error: e.message });
+        }
+      });
+    } catch (e) {
+      resolve({ ok: false, error: e.message });
+    }
+  });
 });
