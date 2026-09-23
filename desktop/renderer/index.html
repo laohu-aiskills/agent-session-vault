@@ -339,12 +339,30 @@ function fmtTok(n){
   if(n >= 1e3) return (n/1e3).toFixed(1)+'k';
   return String(Math.round(n));
 }
-/* 「终端继续」：各 CLI 的会话续接命令。只登记有把握的写法，
+/* 「终端继续」：各 CLI 的续接方式与权限开关。只登记有把握的写法，
  * 其余 agent 打开终端后停在项目目录，命令由用户自己敲。 */
-const RESUME_CMD = {
-  'claude-code': (sid) => `claude --resume ${sid}`,
-  'codex':       (sid) => `codex resume ${sid}`,
+const AGENT_CLI = {
+  'claude-code': {
+    bin: 'claude',
+    resume: (sid) => `--resume ${sid}`,
+    last: '-c',
+    yolo: '--dangerously-skip-permissions',
+    yoloLabel: '跳过权限确认（--dangerously-skip-permissions）',
+  },
+  'codex': {
+    bin: 'codex',
+    resume: (sid) => `resume ${sid}`,
+    last: 'resume --last',
+    yolo: '--dangerously-bypass-approvals-and-sandbox',
+    yoloLabel: '跳过审批与沙箱（--dangerously-bypass-approvals-and-sandbox）',
+  },
 };
+function buildResumeCommand(agent, sid, mode, yolo){
+  const cli = AGENT_CLI[agent];
+  if(!cli) return '';
+  const base = mode === 'last' ? cli.last : cli.resume(sid);
+  return yolo ? `${cli.bin} ${base} ${cli.yolo}` : `${cli.bin} ${base}`;
+}
 
 /* ---------------- 初始化 ---------------- */
 async function boot(){
@@ -498,7 +516,7 @@ async function openSession(uid, el){
   $('#btnTerm').disabled = !projDir;
   $('#btnTerm').title = !projDir
     ? '该会话没有项目目录信息'
-    : (RESUME_CMD[s.agent] ? `在项目目录打开终端并执行：${RESUME_CMD[s.agent](s.session_id||s.sessionId)}` : '在项目目录打开终端（该 CLI 的续接命令未知，请自行输入）');
+    : (AGENT_CLI[s.agent] ? '选择续接方式与权限后，在项目目录打开终端' : '在项目目录打开终端（该 CLI 的续接命令未知，请自行输入）');
   await renderDetail(data);
 
   $('#findBar').style.display = 'flex';
@@ -1001,19 +1019,58 @@ $('#findBox').addEventListener('keydown', (e) => {
   else if(e.key === 'Escape') closeFind();
 });
 $('#btnFindNext').onclick = findNext;
-$('#btnTerm').onclick = async () => {
+$('#btnTerm').onclick = () => openTermDlg();
+function openTermDlg(){
   if(!current) return;
   const s = current.session;
   const dir = s.project_path || s.projectPath;
   if(!dir){ $('#stRefresh').textContent = '该会话没有项目目录信息，无法打开终端'; return; }
   const sid = s.session_id || s.sessionId;
-  const gen = RESUME_CMD[s.agent];
-  const command = gen && sid ? gen(sid) : '';
+  const cli = AGENT_CLI[s.agent];
+
+  if(!cli){
+    // 续接命令未知的 agent：直接开终端停在项目目录
+    openDlg(`<h3>在终端中打开</h3>
+      <div class="row">目录：<code>${esc(dir)}</code></div>
+      <div class="note">${esc(agentLabels[s.agent] || s.agent)} 的会话续接命令未登记，终端打开后请自行输入。</div>
+      <div class="foot"><button onclick="closeDlg()">取消</button>
+        <button id="btnTermGo" class="primary">打开终端</button></div>`);
+    $('#btnTermGo').onclick = () => doOpenTerminal(dir, '');
+    return;
+  }
+
+  const preview = () => buildResumeCommand(
+    s.agent, sid,
+    document.querySelector('input[name="termMode"]:checked').value,
+    $('#termYolo').checked,
+  );
+  openDlg(`<h3>在终端中继续会话</h3>
+    <div class="row">目录：<code>${esc(dir)}</code></div>
+    <div class="row">
+      <label><input type="radio" name="termMode" value="resume" checked> 恢复该会话（<code>${esc(cli.bin)} ${esc(cli.resume(sid))}</code>）</label>
+    </div>
+    <div class="row">
+      <label><input type="radio" name="termMode" value="last"> 继续最近一次会话（<code>${esc(cli.bin)} ${esc(cli.last)}</code>）</label>
+    </div>
+    <div class="row"><label><input type="checkbox" id="termYolo"> ${esc(cli.yoloLabel)}</label></div>
+    <div class="warn">跳过权限确认意味着 Agent 可以不经询问直接改文件、跑命令，请只在可信项目里使用。</div>
+    <div class="row">命令预览：<code id="termPreview"></code></div>
+    <div class="foot"><button onclick="closeDlg()">取消</button>
+      <button id="btnTermGo" class="primary">打开终端</button></div>`);
+
+  const sync = () => { $('#termPreview').textContent = preview(); };
+  document.querySelectorAll('input[name="termMode"]').forEach(r => r.onchange = sync);
+  $('#termYolo').onchange = sync;
+  sync();
+  $('#btnTermGo').onclick = () => doOpenTerminal(dir, preview());
+}
+async function doOpenTerminal(dir, command){
   const r = await api.openTerminal({ dir, command });
+  closeDlg();
   $('#stRefresh').textContent = r.ok
     ? `已打开终端（${r.via === 'wt' ? 'Windows Terminal' : 'cmd'}）${command ? '：' + command : '：' + dir}`
     : '打开终端失败：' + (r.error || '未知错误');
-};
+}
 $('#btnFindPrev').onclick = findPrev;
 $('#btnFindClose').onclick = closeFind;
 
