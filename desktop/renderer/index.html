@@ -147,6 +147,9 @@ mark.find.cur{background:#e07a1f;color:#fff}
 #updChip{display:none;background:var(--amber-bg);color:var(--amber);border:1px solid #ecd9b0}
 #updChip:hover{background:#f6e3bd}
 #stRefresh{font-size:12px;color:var(--txt3);white-space:nowrap}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--blue);border-top-color:transparent;
+  border-radius:50%;animation:spini .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes spini{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -876,7 +879,8 @@ $('#btnBackup').onclick = async () => {
       <div class="row"><code>${esc(r.out)}</code></div>
       ${r.summary.errors?`<div class="warn">有 ${r.summary.errors} 个文件复制失败，详见 manifest.json</div>`:''}
       <div class="foot"><button onclick="closeDlg()">关闭</button>
-        <button class="primary" onclick="api.openPath('${esc(r.out)}')">打开目录</button></div>`);
+        <button class="primary" id="btnOpenBak">打开目录</button></div>`);
+    $('#btnOpenBak').onclick = () => api.openPath(r.out);
   }catch(e){
     openDlg(`<h3>备份失败</h3><div class="warn">${esc(e.message)}</div>
       <div class="foot"><button onclick="closeDlg()">关闭</button></div>`);
@@ -930,7 +934,8 @@ async function doExport(fmt){
   $('#stIndex').textContent = `已导出 ${size(r.bytes)} 到 ${r.file}`;
   openDlg(`<h3>导出成功</h3><div class="ok">${esc(r.file)}（${size(r.bytes)}）</div>
     <div class="foot"><button onclick="closeDlg()">关闭</button>
-      <button class="primary" onclick="api.openPath('${esc(r.file)}')">打开所在目录</button></div>`);
+      <button class="primary" id="btnOpenExp">打开所在目录</button></div>`);
+  $('#btnOpenExp').onclick = () => api.openPath(r.file);
 }
 
 $('#btnMigrate').onclick = async () => {
@@ -943,14 +948,24 @@ $('#btnMigrate').onclick = async () => {
     <div class="foot"><button onclick="closeDlg()">取消</button><button id="btnMigGo" class="primary">选择目录并迁移</button></div>`);
   $('#btnMigGo').onclick = async () => {
     const to = $('#migTo').value;
-    const r = await api.migrate({ uid: current.uid, to });
-    if(r.canceled) return;
-    const lost = r.report.lostBreakdown;
-    $('#migOut').innerHTML = `
-      <div class="ok">已产出 ${r.wroteMessages} 条文本消息</div>
-      <div class="list"><div>${esc(r.file)}</div><div>${esc(r.noteFile)}</div></div>
-      <div class="note">丢失：工具调用 ${lost.tool_call} 条、工具结果 ${lost.tool_result} 条、推理 ${lost.reasoning} 条（源会话共 ${lost.tool_call+lost.tool_result+lost.reasoning+r.wroteMessages} 条）<br>
-      下一步：把产出目录复制到 <code>${esc(r.target.projectRoot())}</code>。本工具不会改写目标 Agent 的索引库，其会话列表可能不会立即显示这条会话。</div>`;
+    const btn = $('#btnMigGo');
+    btn.disabled = true; btn.textContent = '迁移中…';
+    $('#migOut').innerHTML = '<div class="ok"><span class="spin"></span>正在产出目标格式文件…</div>';
+    try{
+      const r = await api.migrate({ uid: current.uid, to });
+      if(r.canceled){ btn.disabled=false; btn.textContent='选择目录并迁移'; $('#migOut').innerHTML='尚未执行'; return; }
+      const lost = r.report.lostBreakdown;
+      $('#migOut').innerHTML = `
+        <div class="ok">✓ 已产出 ${r.wroteMessages} 条文本消息</div>
+        <div class="list"><div>${esc(r.file)}</div><div>${esc(r.noteFile)}</div></div>
+        <div class="note">丢失：工具调用 ${lost.tool_call} 条、工具结果 ${lost.tool_result} 条、推理 ${lost.reasoning} 条（源会话共 ${lost.tool_call+lost.tool_result+lost.reasoning+r.wroteMessages} 条）<br>
+        下一步：把产出目录复制到 <code>${esc(r.target.projectRoot)}</code>。本工具不会改写目标 Agent 的索引库，其会话列表可能不会立即显示这条会话。</div>
+        <div class="foot"><button id="btnMigOpen">打开产出目录</button></div>`;
+      $('#btnMigOpen').onclick = () => api.openPath(r.file);
+    }catch(e){
+      $('#migOut').innerHTML = `<div class="warn">迁移失败：${esc(e.message)}</div>`;
+      btn.disabled = false; btn.textContent = '选择目录并迁移';
+    }
   };
 };
 

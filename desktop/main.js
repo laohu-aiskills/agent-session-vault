@@ -366,7 +366,19 @@ ipcMain.handle('migrate', async (ev, { uid, to }) => {
   });
   if (canceled || !filePaths.length) return { canceled: true };
   const r = migrate({ session: data.session, messages: data.messages, to, out: filePaths[0], sanitize: true });
-  return { canceled: false, ...r };
+  // IPC 结构化克隆序列化不了函数：target.projectRoot 是方法，
+  // 原样返回会让 invoke 在渲染层 reject（数据其实已写完，界面却停在「尚未执行」）
+  return {
+    canceled: false,
+    file: r.file,
+    noteFile: r.noteFile,
+    dir: r.dir,
+    slug: r.slug,
+    newSessionId: r.newSessionId,
+    wroteMessages: r.wroteMessages,
+    report: r.report,
+    target: { id: r.target.id, label: r.target.label, projectRoot: r.target.projectRoot() },
+  };
 });
 
 ipcMain.handle('migrateTargets', async () => Object.values(TARGETS).map((t) => ({ id: t.id, label: t.label })));
