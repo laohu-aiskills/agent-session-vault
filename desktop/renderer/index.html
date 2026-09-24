@@ -563,9 +563,10 @@ async function renderDetail(data, keepScroll = false){
   const s = data.session;
   $('#detailTitle').innerHTML = `${agentIcon(s.agent, 14)}${esc(s.title || '(无标题)')}`;
   const tk = parseMeta(s).tokens || null;
+  const originator = parseMeta(s).originator;
   const meta = `
     <div class="meta"><table>
-      <tr><td>Agent</td><td>${agentIcon(s.agent, 13)} <code title="标识：${esc(s.agent)}">${esc(agentLabels[s.agent] || s.agent)}</code>${data.source==='live'?' <span class="pill">现场解析</span>':''}</td></tr>
+      <tr><td>Agent</td><td>${agentIcon(s.agent, 13)} <code title="标识：${esc(s.agent)}">${esc(agentLabels[s.agent] || s.agent)}</code>${originator?` <span style="color:var(--txt2)" title="写入该会话的客户端">${esc(originator)}</span>`:''}${data.source==='live'?' <span class="pill">现场解析</span>':''}</td></tr>
       <tr><td>会话 ID</td><td><code>${esc(s.session_id||s.sessionId)}</code></td></tr>
       <tr><td>项目路径</td><td><code>${esc(s.project_path||s.projectPath||'未知')}</code></td></tr>
       <tr><td>创建 / 更新</td><td>${ts(s.created_at||s.createdAt)} / ${ts(s.updated_at||s.updatedAt)}</td></tr>

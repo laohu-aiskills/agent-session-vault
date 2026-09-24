@@ -65,11 +65,14 @@ async function buildIndex({ providers, index, force = false, onProgress = () => 
     byAgent.get(s.agent).push(s);
   }
 
-  // 索引库里有、但这次扫描没再出现的会话 → 源已删除，清理掉
+  // 索引库里有、但这次扫描没再出现的会话 → 源已删除，清理掉。
+  // 只清理本次扫描覆盖的 agent：--agent 过滤时其它 agent 的会话不归这次管
   const liveUids = new Set(sessions.map((s) => s.uid));
+  const scannedAgents = new Set(providers.map((p) => p.id));
   let pruned = 0;
   for (const uid of index.allUids()) {
-    if (!liveUids.has(uid)) { index.removeSession(uid); pruned += 1; }
+    const agent = uid.slice(0, uid.indexOf(':'));
+    if (scannedAgents.has(agent) && !liveUids.has(uid)) { index.removeSession(uid); pruned += 1; }
   }
   if (pruned) log('prune', [`清理已消失的会话 ${pruned} 个`]);
 

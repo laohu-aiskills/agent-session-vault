@@ -25,11 +25,42 @@ const { makeSession, makeMessage, deriveTitle } = require('../model');
 
 const SKIP_RESPONSE_TYPES = new Set(['reasoning_summary']);
 
+// Codex Desktop 会把环境上下文写成 response_item/user「消息」，
+// 这些是注入不是用户输入，进索引只会污染检索结果
+const CODEX_NOISE_PREFIX = [
+  '<recommended_plugins', '<environment_context', '<user_instructions', '<turn_context',
+  '<permissions', '<system-reminder', '<skill ', '<identity_context', '<INSTRUCTIONS',
+  '# AGENTS.md', '<AGENTS.md', '<goal', '<output_style',
+];
+
+function isCodexNoise(t) {
+  const s = String(t || '').trimStart();
+  return CODEX_NOISE_PREFIX.some((p) => s.startsWith(p));
+}
+
 function payloadText(payload) {
   if (!payload) return '';
   if (typeof payload.message === 'string') return payload.message;
   if (typeof payload.text === 'string') return payload.text;
   return '';
+}
+
+/** 相邻同角色同类型的碎段合并（Desktop 流式写入会把一条回复拆成多条 message）。 */
+function mergeAdjacent(msgs) {
+  const out = [];
+  for (const m of msgs) {
+    const prev = out[out.length - 1];
+    if (
+      prev && m.kind === prev.kind && m.role === prev.role
+      && (m.kind === 'text' || m.kind === 'reasoning')
+      && m.tool_name === prev.tool_name
+    ) {
+      prev.text = `${prev.text}\n\n${m.text}`;
+      continue;
+    }
+    out.push(m);
+  }
+  return out;
 }
 
 function mapResponseItem(payload, ts, seqStart) {
@@ -45,11 +76,14 @@ function mapResponseItem(payload, ts, seqStart) {
       if (!b || typeof b !== 'object') continue;
       const text = b.text ?? b.input_text ?? b.output_text ?? '';
       if (!text) continue;
+      if (role === 'user' && isCodexNoise(text)) continue;
       out.push(makeMessage({ seq: seq++, role, kind: 'text', ts, text }));
     }
     if (!content.length) {
       const fallback = payloadText(payload);
-      if (fallback) out.push(makeMessage({ seq: seq++, role, kind: 'text', ts, text: fallback }));
+      if (fallback && !(role === 'user' && isCodexNoise(fallback))) {
+        out.push(makeMessage({ seq: seq++, role, kind: 'text', ts, text: fallback }));
+      }
     }
     return out;
   }
@@ -106,6 +140,16 @@ class CodexProvider {
   async discover() {
     const files = walkFiles(this.root, { exts: ['.jsonl'] });
     const sessions = [];
+    // Codex Desktop 的会话名（thread_name）单独存在 session_index.jsonl，
+    // 是标题的权威来源——没有它，Desktop 会话在列表里全是「(无标题)」认不出来
+    let titles = new Map();
+    try {
+      const { readJsonlIndex } = require('../session-index');
+      titles = readJsonlIndex(path.join(os.homedir(), '.codex', 'session_index.jsonl'), {
+        idField: 'id',
+        titleFields: ['thread_name'],
+      });
+    } catch { /* 索引缺失则退化为正文派生 */ }
     for (const file of files) {
       let st;
       try { st = fs.statSync(file); } catch { continue; }
@@ -126,10 +170,10 @@ class CodexProvider {
           if (!p || typeof p !== 'object') continue;
           if (o.type === 'event_msg' && p.type === 'user_message') {
             const t = payloadText(p);
-            if (t) userTexts.push(t);
+            if (t && !isCodexNoise(t)) userTexts.push(t);
           } else if (o.type === 'response_item' && p.type === 'message' && p.role === 'user') {
             for (const b of (Array.isArray(p.content) ? p.content : [])) {
-              if (b && typeof b === 'object' && b.text) userTexts.push(b.text);
+              if (b && typeof b === 'object' && b.text && !isCodexNoise(b.text)) userTexts.push(b.text);
             }
           }
         }
@@ -146,7 +190,7 @@ class CodexProvider {
         sessionId: sid,
         projectPath: (meta && meta.cwd) || null,
         pathSource: meta && meta.cwd ? 'content' : 'unknown',
-        title,
+        title: (titles.get(sid) && titles.get(sid).title) || title,
         createdAt: toMs(meta && meta.timestamp) || firstTs || st.mtimeMs,
         updatedAt: st.mtimeMs,
         bytes: st.size,
@@ -196,7 +240,7 @@ class CodexProvider {
       for (const m of produced) msgs.push(m);
       if (produced.length) seq = produced[produced.length - 1].seq + 1;
     });
-    return { messages: msgs, title: null, meta: totals ? { tokens: totals } : null };
+    return { messages: mergeAdjacent(msgs), title: null, meta: totals ? { tokens: totals } : null };
   }
 
   originalPaths(session) {
