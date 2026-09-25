@@ -401,10 +401,44 @@ const AGENT_EXE_CANDIDATES = {
   'kimi-code': ['%USERPROFILE%\\.kimi-code\\bin\\kimi.exe'],
   'kimi-cli': ['%USERPROFILE%\\.kimi-code\\bin\\kimi.exe'],
 };
+// MSIX（Microsoft Store）应用：exe 在 WindowsApps 下受 ACL 保护抽不了 icon，
+// 但包内 assets 的 logo PNG 可读，直接按清单拷贝
+const AGENT_MSIX = {
+  codex: '*Codex*',
+};
+const MSIX_LOGO_CANDIDATES = [
+  'assets\\Square44x44Logo.scale-200.png',
+  'assets\\Square44x44Logo.scale-100.png',
+  'assets\\Square44x44Logo.png',
+  'assets\\Square150x150Logo.scale-200.png',
+];
 const iconMem = new Map();
 
 function expandEnv(p) {
   return p.replace(/%([^%]+)%/g, (_, n) => process.env[n] || '');
+}
+
+function msixLogoPng(pattern, outFile) {
+  let loc = '';
+  try {
+    loc = execFileSync('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command',
+        `(Get-AppxPackage -Name '${pattern}' | Select-Object -First 1).InstallLocation`],
+      { timeout: 30000, windowsHide: true, encoding: 'utf8' }).trim();
+  } catch {
+    return false;
+  }
+  if (!loc) return false;
+  for (const rel of MSIX_LOGO_CANDIDATES) {
+    const src = path.join(loc, rel);
+    if (fs.existsSync(src)) {
+      try {
+        fs.copyFileSync(src, outFile);
+        return true;
+      } catch { /* 换下一个候选 */ }
+    }
+  }
+  return false;
 }
 
 function extractIconPng(exe, out) {
@@ -422,17 +456,19 @@ function extractIconPng(exe, out) {
 ipcMain.handle('agentIcon', async (ev, id) => {
   if (iconMem.has(id)) return iconMem.get(id);
   let dataUrl = null;
+  fs.mkdirSync(ICON_DIR, { recursive: true });
+  const png = path.join(ICON_DIR, `${id}.png`);
   const exe = (AGENT_EXE_CANDIDATES[id] || []).map(expandEnv).find((p) => fs.existsSync(p));
-  if (exe) {
-    try {
-      fs.mkdirSync(ICON_DIR, { recursive: true });
-      const png = path.join(ICON_DIR, `${id}.png`);
+  try {
+    if (exe) {
       if (!fs.existsSync(png)) extractIconPng(exe, png);
-      if (fs.existsSync(png)) {
-        dataUrl = 'data:image/png;base64,' + fs.readFileSync(png).toString('base64');
-      }
-    } catch { /* 抽取失败回落 SVG */ }
-  }
+    } else if (AGENT_MSIX[id] && !fs.existsSync(png)) {
+      msixLogoPng(AGENT_MSIX[id], png);
+    }
+    if (fs.existsSync(png)) {
+      dataUrl = 'data:image/png;base64,' + fs.readFileSync(png).toString('base64');
+    }
+  } catch { /* 抽取失败回落 SVG */ }
   iconMem.set(id, dataUrl);
   return dataUrl;
 });
