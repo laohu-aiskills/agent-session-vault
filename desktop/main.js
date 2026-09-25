@@ -407,10 +407,13 @@ const AGENT_MSIX = {
   codex: '*Codex*',
 };
 const MSIX_LOGO_CANDIDATES = [
+  // Square150x150 是带品牌底色的完整应用图标；44x44 系多为透明底单色变体，
+  // 在浅色列表里会糊成一片
+  'assets\\Square150x150Logo.png',
+  'assets\\Square150x150Logo.scale-200.png',
   'assets\\Square44x44Logo.scale-200.png',
   'assets\\Square44x44Logo.scale-100.png',
   'assets\\Square44x44Logo.png',
-  'assets\\Square150x150Logo.scale-200.png',
 ];
 const iconMem = new Map();
 
