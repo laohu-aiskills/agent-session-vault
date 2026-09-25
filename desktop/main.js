@@ -3,7 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 
@@ -386,6 +386,55 @@ ipcMain.handle('migrateTargets', async () => Object.values(TARGETS).map((t) => (
 ipcMain.handle('openPath', async (ev, p) => {
   if (fs.existsSync(p)) { await shell.openPath(path.dirname(p)); return true; }
   return false;
+});
+
+/* ---------------- Agent 真图标抽取 ----------------
+ * 有 GUI 应用的 agent 直接从其 exe 里抽 icon（PowerShell GDI+，零原生依赖），
+ * PNG 缓存在 ~/.agent-session-vault/icons/ 下；抽不到（npm CLI 壳只有 node 图标）
+ * 返回 null，渲染层回退到手绘 SVG。 */
+const ICON_DIR = path.join(os.homedir(), '.agent-session-vault', 'icons');
+const AGENT_EXE_CANDIDATES = {
+  workbuddy: ['%LOCALAPPDATA%\\Programs\\WorkBuddy\\WorkBuddy.exe'],
+  qwenworkcn: ['%LOCALAPPDATA%\\Programs\\QwenWorkCN\\Launcher.exe'],
+  zcode: ['%LOCALAPPDATA%\\Programs\\ZCode\\ZCode.exe'],
+  opencode: ['%LOCALAPPDATA%\\Programs\\@opencode-aidesktop\\OpenCode.exe'],
+  'kimi-code': ['%USERPROFILE%\\.kimi-code\\bin\\kimi.exe'],
+  'kimi-cli': ['%USERPROFILE%\\.kimi-code\\bin\\kimi.exe'],
+};
+const iconMem = new Map();
+
+function expandEnv(p) {
+  return p.replace(/%([^%]+)%/g, (_, n) => process.env[n] || '');
+}
+
+function extractIconPng(exe, out) {
+  const ps = [
+    "Add-Type -AssemblyName System.Drawing",
+    `$i=[System.Drawing.Icon]::ExtractAssociatedIcon('${exe.replace(/'/g, "''")}')`,
+    "if($i){ $i.ToBitmap().Save('" + out.replace(/'/g, "''") + "',[System.Drawing.Imaging.ImageFormat]::Png) }",
+  ].join('; ');
+  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+    timeout: 20000, windowsHide: true, stdio: 'ignore',
+  });
+  return fs.existsSync(out);
+}
+
+ipcMain.handle('agentIcon', async (ev, id) => {
+  if (iconMem.has(id)) return iconMem.get(id);
+  let dataUrl = null;
+  const exe = (AGENT_EXE_CANDIDATES[id] || []).map(expandEnv).find((p) => fs.existsSync(p));
+  if (exe) {
+    try {
+      fs.mkdirSync(ICON_DIR, { recursive: true });
+      const png = path.join(ICON_DIR, `${id}.png`);
+      if (!fs.existsSync(png)) extractIconPng(exe, png);
+      if (fs.existsSync(png)) {
+        dataUrl = 'data:image/png;base64,' + fs.readFileSync(png).toString('base64');
+      }
+    } catch { /* 抽取失败回落 SVG */ }
+  }
+  iconMem.set(id, dataUrl);
+  return dataUrl;
 });
 
 /**

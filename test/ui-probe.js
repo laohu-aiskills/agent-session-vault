@@ -26,8 +26,9 @@ try {
   while (Date.now() < deadline && !document.querySelector('#list .item')) await sleep(200);
   step('列表就绪，点击首项');
   $('#list .item').click();
-  await sleep(1000);
-  step('详情已打开');
+  // 详情是分批渲染 + 启动期还有图标抽取在抢 CPU，轮询等消息真正出现
+  const dl = Date.now() + 15000;
+  while (Date.now() < dl && !document.querySelector('#detail .msg')) await sleep(200);
   ok('详情已渲染消息', document.querySelectorAll('#detail .msg').length > 0);
   ok('查找栏随会话出现', $('#findBar').style.display === 'flex');
 

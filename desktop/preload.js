@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('asv', {
   migrateTargets: () => ipcRenderer.invoke('migrateTargets'),
   openPath: (p) => ipcRenderer.invoke('openPath', p),
   openTerminal: (opts) => ipcRenderer.invoke('openTerminal', opts),
+  agentIcon: (id) => ipcRenderer.invoke('agentIcon', id),
 
   onIndexProgress: (cb) => {
     const h = (ev, payload) => cb(payload);

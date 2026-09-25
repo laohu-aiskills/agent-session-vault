@@ -328,7 +328,23 @@ function agentIcon(id, size = 12){
   return `<svg class="agi" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
 }
 function agentBadge(id){
-  return `<span class="pill blue">${agentIcon(id)}${esc(agentLabels[id] || id)}</span>`;
+  return `<span class="pill blue">${iconHtml(id, 12)}${esc(agentLabels[id] || id)}</span>`;
+}
+/* exe 抽取的真图标优先；抽不到（CLI 壳）回退手绘 SVG */
+const exeIcons = {};
+async function loadExeIcons(){
+  const ids = Object.keys(agentLabels);
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const d = await api.agentIcon(id);
+      if (d) exeIcons[id] = d;
+    } catch { /* 回落 SVG */ }
+  }));
+}
+function iconHtml(id, size = 12){
+  const u = exeIcons[id];
+  if (u) return `<img class="agi" src="${u}" width="${size}" height="${size}" style="border-radius:2px" alt="">`;
+  return agentIcon(id, size);
 }
 /* 会话元数据：索引行给 meta_json 字符串，live 解析给对象 */
 function parseMeta(s){
@@ -376,6 +392,9 @@ async function boot(){
   await refreshAgents();
   await refreshStats();
   await loadList();
+  loadExeIcons().then(() => {
+    if(!$('#q').value.trim()) loadList();
+  }).catch(()=>{});
 }
 
 async function refreshAgents(){
@@ -520,10 +539,10 @@ async function openSession(uid, el){
   $('#btnTerm').title = !projDir
     ? '该会话没有项目目录信息'
     : (AGENT_CLI[s.agent] ? '选择续接方式与权限后，在项目目录打开终端' : '在项目目录打开终端（该 CLI 的续接命令未知，请自行输入）');
-  await renderDetail(data);
-
+  // 查找栏先亮出来：分批渲染可能要几秒，查找入口不该跟着等
   $('#findBar').style.display = 'flex';
   $('#findBox').value = ''; applyFind('');
+  await renderDetail(data);
 
   // 打开后清除该行的「新更新」标记（只改这一行，不重建列表）
   const rowEl = document.querySelector(`#list .item[data-uid="${CSS.escape(uid)}"]`);
@@ -561,12 +580,12 @@ async function renderDetail(data, keepScroll = false){
   const box = $('#detail');
   const keep = box.scrollTop;
   const s = data.session;
-  $('#detailTitle').innerHTML = `${agentIcon(s.agent, 14)}${esc(s.title || '(无标题)')}`;
+  $('#detailTitle').innerHTML = `${iconHtml(s.agent, 14)}${esc(s.title || '(无标题)')}`;
   const tk = parseMeta(s).tokens || null;
   const originator = parseMeta(s).originator;
   const meta = `
     <div class="meta"><table>
-      <tr><td>Agent</td><td>${agentIcon(s.agent, 13)} <code title="标识：${esc(s.agent)}">${esc(agentLabels[s.agent] || s.agent)}</code>${originator?` <span style="color:var(--txt2)" title="写入该会话的客户端">${esc(originator)}</span>`:''}${data.source==='live'?' <span class="pill">现场解析</span>':''}</td></tr>
+      <tr><td>Agent</td><td>${iconHtml(s.agent, 13)} <code title="标识：${esc(s.agent)}">${esc(agentLabels[s.agent] || s.agent)}</code>${originator?` <span style="color:var(--txt2)" title="写入该会话的客户端">${esc(originator)}</span>`:''}${data.source==='live'?' <span class="pill">现场解析</span>':''}</td></tr>
       <tr><td>会话 ID</td><td><code>${esc(s.session_id||s.sessionId)}</code></td></tr>
       <tr><td>项目路径</td><td><code>${esc(s.project_path||s.projectPath||'未知')}</code></td></tr>
       <tr><td>创建 / 更新</td><td>${ts(s.created_at||s.createdAt)} / ${ts(s.updated_at||s.updatedAt)}</td></tr>
