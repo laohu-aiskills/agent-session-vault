@@ -434,7 +434,7 @@ async function refreshStats(){
 async function loadList(){
   const agent = $('#agentFilter').value || null;
   const order = $('#orderSel').value;
-  const { rows, total } = await api.list({ agent, order, dir: listDir, limit: 200 });
+  const { rows, total } = await api.list({ agent, order, dir: listDir, limit: 2000 });
   setListCount(`显示 ${rows.length} / 共 ${total}`);
 
   // 与上次快照对比：更新时间变化或新出现的会话标记为「有更新」。
@@ -491,7 +491,7 @@ async function doSearch(){
   if(!q){ await loadList(); $('#modeHint').textContent=''; return; }
   setListCount('检索中…', true);
   const agent = $('#agentFilter').value || null;
-  const { mode, hits, total_matches, truncated } = await api.search({ query: q, agent, limit: 200 });
+  const { mode, hits, total_matches, truncated } = await api.search({ query: q, agent, limit: 2000 });
   if(listDir === 'asc') hits.reverse();   // 检索结果跟随当前排序方向
   $('#modeHint').textContent = mode==='fts' ? '索引检索' : '全表扫描（短查询）';
   setListCount(`命中 ${hits.length} 个会话 · ${total_matches} 处消息${truncated?'（已截断）':''}`);

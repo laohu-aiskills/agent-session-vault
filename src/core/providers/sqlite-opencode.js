@@ -165,11 +165,17 @@ class SqliteOpencodeProvider {
   async parse(session) {
     const { con, cleanup } = this._open();
     try {
+      // opencode 官方库没有 sequence 列（zcode 有），动态探测排序键
+      const tableCols = (t) => con.prepare(`PRAGMA table_info(${t})`).all().map((r) => r.name);
+      const msgHasSeq = tableCols('message').includes('sequence');
+      const partHasSeq = tableCols('part').includes('sequence');
       const msgs = con.prepare(
-        'select id, time_created, data from message where session_id = ? order by time_created asc, sequence asc',
+        `select id, time_created, data from message where session_id = ?
+         order by time_created asc${msgHasSeq ? ', sequence asc' : ''}`,
       ).all(session.sessionId);
       const partStmt = con.prepare(
-        'select time_created, data from part where message_id = ? order by sequence asc, time_created asc',
+        `select time_created, data from part where message_id = ?
+         order by ${partHasSeq ? 'sequence asc, ' : ''}time_created asc`,
       );
 
       const out = [];
