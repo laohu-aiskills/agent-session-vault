@@ -434,7 +434,7 @@ async function refreshStats(){
 async function loadList(){
   const agent = $('#agentFilter').value || null;
   const order = $('#orderSel').value;
-  const { rows, total } = await api.list({ agent, order, dir: listDir, limit: 2000 });
+  const { rows, total } = await api.list({ agent, order, dir: listDir, limit: 0 });   // 0 = 全部
   setListCount(`显示 ${rows.length} / 共 ${total}`);
 
   // 与上次快照对比：更新时间变化或新出现的会话标记为「有更新」。
@@ -464,7 +464,9 @@ function renderList(rows, fresh){
     box.innerHTML = '<div class="empty">没有会话。<br>请先点右上角「建索引」。</div>';
     return;
   }
-  for(const r of rows){
+  // 分批插入：几千行一次 append 也会卡一拍
+  const BATCH = 500;
+  const build = (r) => {
     const d = document.createElement('div');
     d.className = 'item' + (fresh.has(r.uid) ? ' fresh' : '');
     d.dataset.uid = r.uid;
@@ -480,9 +482,20 @@ function renderList(rows, fresh){
       </div>
       <div class="m" style="margin-top:2px"><span style="font-size:11px">${esc(r.project_path||'未知项目')}</span></div>`;
     d.onclick = () => openSession(r.uid, d);
-    box.appendChild(d);
-  }
+    return d;
+  };
+  const frag = document.createDocumentFragment();
+  for(let i = 0; i < Math.min(BATCH, rows.length); i++) frag.appendChild(build(rows[i]));
+  box.appendChild(frag);
   box.scrollTop = keepScroll;
+  (async () => {
+    for(let i = BATCH; i < rows.length; i += BATCH){
+      await new Promise(r => setTimeout(r, 0));
+      const frag2 = document.createDocumentFragment();
+      for(let j = i; j < Math.min(i + BATCH, rows.length); j++) frag2.appendChild(build(rows[j]));
+      box.appendChild(frag2);
+    }
+  })();
 }
 
 /* ---------------- 检索 ---------------- */
@@ -491,7 +504,7 @@ async function doSearch(){
   if(!q){ await loadList(); $('#modeHint').textContent=''; return; }
   setListCount('检索中…', true);
   const agent = $('#agentFilter').value || null;
-  const { mode, hits, total_matches, truncated } = await api.search({ query: q, agent, limit: 2000 });
+  const { mode, hits, total_matches, truncated } = await api.search({ query: q, agent, limit: 0 });
   if(listDir === 'asc') hits.reverse();   // 检索结果跟随当前排序方向
   $('#modeHint').textContent = mode==='fts' ? '索引检索' : '全表扫描（短查询）';
   setListCount(`命中 ${hits.length} 个会话 · ${total_matches} 处消息${truncated?'（已截断）':''}`);

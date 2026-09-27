@@ -156,7 +156,7 @@ async function cmdList(flags) {
     index.close();
     return;
   }
-  const limit = Number(flags.limit || 30);
+  const limit = Number(flags.limit || 30) || 0;   // --limit 0 = 全部
   const rows = index.listSessions({
     agent: flags.agent || null,
     project: flags.project || null,
@@ -436,7 +436,7 @@ ${bold('命令')}
   stats       [--json]            查看索引库概览
   list        [--agent X] [--project P] [--limit N] [--order created|updated]
               [--dir asc|desc] [--json]
-                                  列出会话（--dir 排序方向，默认倒序）
+                                  列出会话（--dir 排序方向，默认倒序；--limit 0 = 全部）
   show        <uid|会话id> [--full] [--limit N] [--json]
                                   查看某会话的消息流
   search      <关键词> [--agent X] [--kind text,reasoning,tool_call,tool_result]

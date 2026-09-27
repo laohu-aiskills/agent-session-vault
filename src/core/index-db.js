@@ -188,9 +188,11 @@ class IndexDb {
     if (project) { where.push('(project_path like ? or title like ?)'); args.push(`%${project}%`, `%${project}%`); }
     const col = order === 'created' ? 'created_at' : 'updated_at';
     const dirSql = String(dir).toLowerCase() === 'asc' ? 'asc' : 'desc';
+    // limit <= 0 视为不限制
+    const limitSql = Number(limit) > 0 ? ` limit ${Number(limit)} offset ${Number(offset) || 0}` : '';
     const sql = `select * from sessions ${where.length ? 'where ' + where.join(' and ') : ''}
-                 order by ${col} ${dirSql} limit ? offset ?`;
-    return this.db.prepare(sql).all(...args, limit, offset);
+                 order by ${col} ${dirSql}${limitSql}`;
+    return this.db.prepare(sql).all(...args);
   }
 
   /** 全部已索引会话的 uid。prune 用，避免整表全列加载 */
@@ -275,8 +277,8 @@ class IndexDb {
       if (cur) cur.match_count += 1;
       else byUid.set(r.uid, { ...r, match_count: 1 });
     }
-    // rows 已按 updated_at desc 排序，Map 保持插入序即所需序
-    const hits = [...byUid.values()].slice(0, limit);
+    // rows 已按 updated_at desc 排序，Map 保持插入序即所需序；limit <= 0 = 全部
+    const hits = limit > 0 ? [...byUid.values()].slice(0, limit) : [...byUid.values()];
     return { mode: q.length >= 3 ? 'fts' : 'like', hits, total_matches: total, truncated: rows.length >= rawLimit };
   }
 }

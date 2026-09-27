@@ -277,7 +277,7 @@ ipcMain.handle('list', async (ev, opts = {}) => withIndex((idx) => ({
   rows: idx.listSessions({
     agent: opts.agent || null,
     project: opts.project || null,
-    limit: opts.limit || 100,
+    limit: opts.limit ?? 100,
     order: opts.order || 'updated',
     dir: opts.dir === 'asc' ? 'asc' : 'desc',
   }),
@@ -288,7 +288,7 @@ ipcMain.handle('search', async (ev, opts = {}) => withIndex((idx) => idx.search(
   agent: opts.agent || null,
   project: opts.project || null,
   kinds: opts.kinds || null,
-  limit: opts.limit || 50,
+  limit: opts.limit ?? 50,
 })));
 
 ipcMain.handle('show', async (ev, uid) => withIndex((idx) => {
